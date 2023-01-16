@@ -47,10 +47,11 @@ class(my_HOBO$Datum.Zeit..GMT.01.00[1])
 # GMT+1)
 
 tz(my_HOBO$Datum.Zeit..GMT.01.00)
+# TODO get this timezone stuff right
 
 # ld thinks it's UTC but it is actually UTC+01
 
-my_HOBO$Datum.Zeit..GMT.01.00 <- force_tz(my_HOBO$Datum.Zeit..GMT.01.00, "Europe/Berlin" )
+my_HOBO$Datum.Zeit..GMT.01.00 <- with_tz(my_HOBO$Datum.Zeit..GMT.01.00, "Europe/Berlin" )
 
 # tidy it all up, truncate later
 
@@ -67,12 +68,15 @@ caltime <- t_cal$This.is.the.calibration.value[3]
 
 calib_line <- which(my_HOBO$dttm == caltime)
 
-num(my_HOBO[calib_line,]$temp, digits = 3) # it's 19.7 where it is supposed to be 19.3 so my hobo
+meas_temp <- num(my_HOBO[calib_line,]$temp, digits = 3) # it's 19.7 where it is supposed to be 19.3 so my hobo
 # measured 0.4 deg C plus
+tru_temp <- num(as.numeric(t_cal$to.calibrate.your.Hobo.measurements.in..C.[3]), digits = 3)
 
-# so -0.4 is now my calibration offset
+cal_offset <- meas_temp[1]-tru_temp[1]
 
-my_HOBO$temp <- my_HOBO$temp-0.4
+# so -0.267 is now my calibration offset
+
+my_HOBO$temp <- my_HOBO$temp-cal_offset
 
 # The timeseries start on 1th of December at 00:00 and ends on the 7th of January 2023 at 23:50
 # (UTC+1)
@@ -81,6 +85,11 @@ start_time <- ymd_hms("2022-12-01 00:00:00")
 end_time <- ymd_hms("2023-01-07 23:50:00")
 time_range <- interval(start_time, end_time)
 
-my_HOBO <- my_HOBO[my_HOBO$dttm %within% time_range,]
+# my_HOBO <- my_HOBO[my_HOBO$dttm %within% time_range,]
+# this does not honor the "edges"
+# my_HOBO <- my_HOBO[my_HOBO$dttm >= start_time &&
+                     my_HOBO$dttm <= end_time,]
 
 # this f**ed up the id column...
+
+
