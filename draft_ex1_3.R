@@ -77,6 +77,7 @@ num(my_HOBO[calib_line,]$temp, digits = 3) # it's 19.7 where it is supposed to b
 
 my_HOBO$temp <- my_HOBO$temp-0.4
 
+# TODO truncate but I do not know the time frame yet...
 
 
 
