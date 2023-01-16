@@ -1,4 +1,5 @@
 library(tidyverse)
+library(lubridate)
 options(digits=7)
 
 # get raw HOBO data from github via raw link
@@ -8,11 +9,7 @@ my_HOBO <- read.csv("https://raw.githubusercontent.com/data-hydenv/data/master/h
 
 # get calibration
 
-t_cal <- read.csv(
-  "https://raw.githubusercontent.com/
-data-hydenv/data/master/hobo/2023/
-calibration.csv"
-)
+t_cal <- read.csv("https://raw.githubusercontent.com/data-hydenv/data/master/hobo/2023/calibration.csv")
 
 # Data should be prepared as data frame with one
 # line per time step and four columns with four column
@@ -77,7 +74,13 @@ num(my_HOBO[calib_line,]$temp, digits = 3) # it's 19.7 where it is supposed to b
 
 my_HOBO$temp <- my_HOBO$temp-0.4
 
-# TODO truncate but I do not know the time frame yet...
+# The timeseries start on 1th of December at 00:00 and ends on the 7th of January 2023 at 23:50
+# (UTC+1)
 
+start_time <- ymd_hms("2022-12-01 00:00:00")
+end_time <- ymd_hms("2023-01-07 23:50:00")
+time_range <- interval(start_time, end_time)
 
+my_HOBO <- my_HOBO[my_HOBO$dttm %within% time_range,]
 
+# this f**ed up the id column...
