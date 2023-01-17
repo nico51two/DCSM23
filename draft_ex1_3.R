@@ -51,7 +51,7 @@ tz(my_HOBO$Datum.Zeit..GMT.01.00)
 
 # ld thinks it's UTC but it is actually UTC+01
 
-my_HOBO$Datum.Zeit..GMT.01.00 <- with_tz(my_HOBO$Datum.Zeit..GMT.01.00, "Europe/Berlin" )
+# my_HOBO$Datum.Zeit..GMT.01.00 <- with_tz(my_HOBO$Datum.Zeit..GMT.01.00, "Europe/Berlin" )
 
 # tidy it all up, truncate later
 
@@ -87,9 +87,14 @@ time_range <- interval(start_time, end_time)
 
 # my_HOBO <- my_HOBO[my_HOBO$dttm %within% time_range,]
 # this does not honor the "edges"
-# my_HOBO <- my_HOBO[my_HOBO$dttm >= start_time &&
-                     my_HOBO$dttm <= end_time,]
+# my_HOBOTST <- my_HOBO[my_HOBO$dttm >= start_time &&
+#                     my_HOBO$dttm <= end_time,]
 
-# this f**ed up the id column...
+my_HOBO <- my_HOBO %>% 
+  filter(between(dttm, start_time, end_time))
 
+# fix id column
+
+my_HOBO <- my_HOBO %>% 
+  mutate(., id = c(1:length(my_HOBO$id)))
 
