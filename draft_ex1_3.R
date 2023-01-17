@@ -108,7 +108,7 @@ my_HOBO <- my_HOBO %>%
 
 # and temp again because the calibration fed that up
 
-#my_HOBO$temp <- num(my_HOBO$temp, digits = 3)
+# my_HOBO$temp <- num(my_HOBO$temp, digits = 3)
 
 my_HOBO$temp <-  format(my_HOBO$temp, digits=3, nsmall=3)
 my_HOBO$lux <-  format(my_HOBO$lux, digits=3, nsmall=3)
@@ -131,5 +131,35 @@ plot(my_HOBO$temp, type = "l")
 
 range(my_HOBO$lux,na.rm = T)
 my_HOBO$temp[which(my_HOBO$temp==min(my_HOBO$temp))]
+
+
+# TODO test and benchmark re-import using different functions
+# TODO add data head after re import
+# TODO re-import for QC - for now I will design the QC using the present objects
+
+HOBO_qc <- read.csv("https://raw.githubusercontent.com/data-hydenv/data/master/hobo/2023/10_minutes/10350049.csv")
+
+# quality control
+
+# plausible values
+
+range(HOBO_qc$temp)
+
+# this is well within the measurement range of the device
+# all data points passed the measurement range check
+
+# plausible rate of change
+
+# lag one column, then mutate difference to new column
+
+HOBO_wip <- HOBO_qc %>% 
+  mutate(., lagged=lag(temp)) %>% 
+  mutate(., delta=temp-lagged)
+
+range(na.omit(HOBO_wip$delta))
+# delta values way out of the legal range so these must be flagged
+
+
+
 
 
