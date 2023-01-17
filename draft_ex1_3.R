@@ -98,3 +98,13 @@ my_HOBO <- my_HOBO %>%
 my_HOBO <- my_HOBO %>% 
   mutate(., id = c(1:length(my_HOBO$id)))
 
+# fix decimals of lux vector
+
+my_HOBO$lux <- num(my_HOBO$lux, digits = 3)
+
+# drop seconds from dttm
+
+my_HOBO$dttm <- format(my_HOBO$dttm, "%Y-%m-%d %H:%M")
+
+
+
