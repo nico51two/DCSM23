@@ -1,6 +1,5 @@
 library(tidyverse)
 library(lubridate)
-options(digits=7)
 
 # get raw HOBO data from github via raw link
 
@@ -85,10 +84,7 @@ start_time <- ymd_hms("2022-12-01 00:00:00")
 end_time <- ymd_hms("2023-01-07 23:50:00")
 time_range <- interval(start_time, end_time)
 
-# my_HOBO <- my_HOBO[my_HOBO$dttm %within% time_range,]
-# this does not honor the "edges"
-# my_HOBOTST <- my_HOBO[my_HOBO$dttm >= start_time &&
-#                     my_HOBO$dttm <= end_time,]
+# filter accordingly
 
 my_HOBO <- my_HOBO %>% 
   filter(between(dttm, start_time, end_time))
@@ -100,11 +96,25 @@ my_HOBO <- my_HOBO %>%
 
 # fix decimals of lux vector
 
-my_HOBO$lux <- num(my_HOBO$lux, digits = 3)
+#my_HOBO$lux <- num(my_HOBO$lux, digits = 3)
+
+# and temp again because the calibration fed that up
+
+#my_HOBO$temp <- num(my_HOBO$temp, digits = 3)
+
+my_HOBO$temp <-  format(my_HOBO$temp, digits=3, nsmall=3)
+my_HOBO$lux <-  format(my_HOBO$lux, digits=3, nsmall=3)
+
 
 # drop seconds from dttm
 
 my_HOBO$dttm <- format(my_HOBO$dttm, "%Y-%m-%d %H:%M")
+
+# write to file
+getwd()
+setwd("C:/Users/johan/Desktop/DCSM_home/DCSM23/10min")
+write_csv(my_HOBO, file = "10350049.csv")
+
 
 
 
