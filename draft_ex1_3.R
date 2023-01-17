@@ -1,5 +1,6 @@
 library(tidyverse)
 library(lubridate)
+options(digits = 3)
 
 # get raw HOBO data from github via raw link
 
@@ -32,7 +33,7 @@ head(my_HOBO) # skipped the other line at import
 # its month - day - year - hour - minute - sec - AM/PM
 # timezone is in the column name (GMT+01)
 # looks like this:
-library(lubridate)
+
 
 my_HOBO$Datum.Zeit..GMT.01.00[1]
 class(my_HOBO$Datum.Zeit..GMT.01.00[1])
@@ -69,9 +70,16 @@ calib_line <- which(my_HOBO$dttm == caltime)
 
 meas_temp <- num(my_HOBO[calib_line,]$temp, digits = 3) # it's 19.7 where it is supposed to be 19.3 so my hobo
 # measured 0.4 deg C plus
+
+meas_temp <- meas_temp[1]
+
 tru_temp <- num(as.numeric(t_cal$to.calibrate.your.Hobo.measurements.in..C.[3]), digits = 3)
 
-cal_offset <- meas_temp[1]-tru_temp[1]
+tru_temp <- tru_temp[1]
+
+cal_offset <- meas_temp-tru_temp
+
+cal_offset <- as.numeric(cal_offset[1])
 
 # so -0.267 is now my calibration offset
 
@@ -116,5 +124,12 @@ setwd("C:/Users/johan/Desktop/DCSM_home/DCSM23/10min")
 write_csv(my_HOBO, file = "10350049.csv")
 
 
+
+# first expl plot
+
+plot(my_HOBO$temp, type = "l")
+
+range(my_HOBO$lux,na.rm = T)
+my_HOBO$temp[which(my_HOBO$temp==min(my_HOBO$temp))]
 
 
