@@ -283,3 +283,20 @@ summary(HOBO_wip$lux) # quite the spread
 sd(HOBO_wip$lux)
 toplux <- filter(HOBO_wip,lux<=500 & lux>1)
 hist(toplux$lux,breaks=50)
+ 
+# generate a new column in your
+# data that gives the specific SICs for each data point (e.g. lux value = 600 means class: Overcast (full)). You
+# should adjust the name of the SICs in your data to be unique, without capital letters or blank
+
+# use dplyr::case_when
+
+
+HOBO_wip <- HOBO_wip %>% 
+  mutate(SIC = case_when(lux <= 10 ~ 'Night_0',
+                         lux <= 500 ~ 'Rise_Set_1',
+                         lux <= 2000 ~ 'Overcast_full_2',
+                         lux <= 15000 ~ 'Overcast_light_3',
+                         lux <= 20000 ~ 'Clear_4',
+                         lux < 50000 ~ 'Sunshine_5',
+                         lux >= 50000 ~ 'Brightshine_6',
+                         ))
