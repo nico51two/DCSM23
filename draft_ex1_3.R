@@ -300,3 +300,24 @@ HOBO_wip <- HOBO_wip %>%
                          lux < 50000 ~ 'Sunshine_5',
                          lux >= 50000 ~ 'Brightshine_6',
                          ))
+
+unique(HOBO_wip$SIC)
+# only 0 through 3 present: that's expected as the sensor was housed in a planter
+
+# no more flagging necessary.. putting the sensor in a planter was the best idea ever...
+
+HOBO_wip <- HOBO_wip %>% 
+  mutate(qc_tot = qc_P + qc_P)
+
+HOBO_wip$qc_tot[1:5] <- 0
+
+
+HOBO_wip <- HOBO_wip %>% 
+  mutate(qc_all = case_when(qc_tot == 0 ~ 0,
+                   qc_tot != 0 ~ 1))
+
+# as percentage
+
+qc_result <- table(HOBO_wip$qc_all)
+
+(qc_result[2]/length(HOBO_wip$qc_all))*100
