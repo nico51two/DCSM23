@@ -159,7 +159,26 @@ HOBO_wip <- HOBO_qc %>%
 range(na.omit(HOBO_wip$delta))
 # delta values way out of the legal range so these must be flagged
 
+# 
+# Air temperature: 0.1∞C over the past 60 minutes;
+# ï Dew point temperature: 0.1∞C over the past 60 minutes;
+# ï Ground temperature: 0.1∞C over the past 60 minutes
 
+
+flagR <- function(x) {
+  ifelse(x>=1, "bad","good")
+}
+
+
+HOBO_wip <- cbind(HOBO_wip,flag=HOBO_wip$delta)
+
+flag <- sapply(HOBO_wip$flag,flagR)
+
+HOBO_wip <- cbind(HOBO_wip,flag)
+
+length(which(flag=="bad"))
+
+# 24 "bad" data points
 
 
 
