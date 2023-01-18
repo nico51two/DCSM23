@@ -1,8 +1,6 @@
 library(tidyverse)
 library(lubridate)
-library(zoo)
 options(digits = 3)
-
 
 # get raw HOBO data from github via raw link
 
@@ -378,6 +376,22 @@ hist(which(flag==1),breaks = 60)
 
 # vector for qc_per flag with NA in 1:4
 # iterate over delta_t
-# if delta_t 
+# use length(unique(subset of delta_t))
 
 # zoo::rollapply
+
+# still needs a fct to check equality length(unique(x)) == 1
+
+flagP <- function(x){
+  ifelse(length(unique(x)) == 1, 1,0)  
+}
+
+# rollapply this
+
+library(zoo)
+
+qc2 <- rollapply(HOBO_wip$delta, width=6,FUN=flagP)
+
+# this seems to work
+
+
