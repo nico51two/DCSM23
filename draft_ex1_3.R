@@ -315,10 +315,43 @@ bad_hours <- test$h_flag
 
 qc_df2 <- qc_df
 
-
-# qc_df2 <- qc_df2 %>% 
-#   filter(., h_ct %in% bad_hours) %>% 
-#   temp <- NA
-
 bad_temps <- which(qc_df2$h_ct %in% bad_hours)
 qc_df2$temp[bad_temps] <- NA
+
+# Calculate the share of NAs in your hourly time-series in % and write it into the
+# meta table (sheet: “Quality
+
+
+hrly_dat <- qc_df2 %>% 
+  group_by(., h_ct) %>% 
+  summarise(., mean_temp=mean(temp))
+# this yields hourly means with NAs 
+
+# share of NA in hourly time series
+
+table(is.na(hrly_dat$mean_temp))
+# 50 NAs
+
+num((50/length(hrly_dat$mean_temp))*100,digits = 4)
+
+
+# At the end of this exercise you should have generated one tibble or data.frame named hobo_hourly with
+# averaged temperature values per hour or NA values (if the hour is flagged as bad data). Follow the following
+# rules to create your file:
+#   - 2 columns: date_time and th
+# - date_time: the timestamp in UTC+1
+# - th: hourly Temperature values (4 digits), NA values possible
+# - the date_time should be continuous, so for every hour in the measurement period there should be
+# one line
+
+dttm <- seq(start_time, end_time, by= "hours")
+
+hobo_hourly <- hrly_dat %>% 
+  select(th=mean_temp) %>% 
+  mutate(date_time=dttm) %>% 
+  mutate(origin=rep("H"))
+
+hobo_hourly$date_time <- format(hobo_hourly$date_time, "%Y-%m-%d %H:%M:%S")
+hobo_hourly$th <-  format(hobo_hourly$th, digits=3, nsmall=3)
+
+write_csv(hobo_hourly, file = "10350049_Th.csv" )
