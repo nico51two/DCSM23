@@ -124,62 +124,7 @@ getwd()
 setwd("C:/Users/johan/Desktop/DCSM_home/DCSM23/10min")
 write_csv(my_HOBO, file = "10350049.csv")
 
-
-
-# first expl plot
-
-plot(my_HOBO$temp, type = "l")
-
-range(my_HOBO$lux,na.rm = T)
-my_HOBO$temp[which(my_HOBO$temp==min(my_HOBO$temp))]
-
-
-# TODO test and benchmark re-import using different functions
-# TODO add data head after re import
-# TODO re-import for QC - for now I will design the QC using the present objects
-
-HOBO_qc <- read.csv("https://raw.githubusercontent.com/data-hydenv/data/master/hobo/2023/10_minutes/10350049.csv")
-
-# quality control
-
-# plausible values
-
-range(HOBO_qc$temp)
-
-# this is well within the measurement range of the device
-# all data points passed the measurement range check
-
-# plausible rate of change
-
-# lag one column, then mutate difference to new column
-
-HOBO_wip <- HOBO_qc %>% 
-  mutate(., lagged=lag(temp)) %>% 
-  mutate(., delta=temp-lagged)
-
-range(na.omit(HOBO_wip$delta))
-# delta values way out of the legal range so these must be flagged
-
-# 
-# Air temperature: 0.1∞C over the past 60 minutes;
-# ï Dew point temperature: 0.1∞C over the past 60 minutes;
-# ï Ground temperature: 0.1∞C over the past 60 minutes
-
-
-flagR <- function(x) {
-  ifelse(x>=1, 1,0)
-}
-
-
-HOBO_wip <- cbind(HOBO_wip,QC_proc=HOBO_wip$delta)
-
-flag <- sapply(HOBO_wip$QC_proc,flagR)
-
-HOBO_wip$QC_proc <- flag
-
-length(which(flag==1))
-
-# 24 "bad" data points
+# TODO add a line that shows that there were no NAs
 
 # first expl plot
 
@@ -200,6 +145,8 @@ HOBO_qc <- read.csv("https://raw.githubusercontent.com/data-hydenv/data/master/h
 # plausible values
 
 range(HOBO_qc$temp)
+
+
 
 # this is well within the measurement range of the device
 # all data points passed the measurement range check
@@ -231,11 +178,11 @@ qc_R <- sapply(HOBO_wip$delta,flagR)
 
 HOBO_wip <- cbind(HOBO_wip,qc_R)
 
-length(which(flag=="bad"))
+length(which(qc_R==1))
 
 # 24 "bad" data points
 
-hist(which(flag==1),breaks = 60)
+hist(which(qc_R==1),breaks = 60)
 
 # qc 2 min. variability
 
@@ -307,7 +254,7 @@ unique(HOBO_wip$SIC)
 # no more flagging necessary.. putting the sensor in a planter was the best idea ever...
 
 HOBO_wip <- HOBO_wip %>% 
-  mutate(qc_tot = qc_P + qc_P)
+  mutate(qc_tot = qc_P + qc_R)
 
 HOBO_wip$qc_tot[1:5] <- 0
 
@@ -320,4 +267,48 @@ HOBO_wip <- HOBO_wip %>%
 
 qc_result <- table(HOBO_wip$qc_all)
 
-(qc_result[2]/length(HOBO_wip$qc_all))*100
+qc_result
+
+
+num(((qc_result[2]/length(HOBO_wip$qc_all))*100),digits=4)
+
+# TODO
+# Present a table or graph to show how many data points fail during the four specific QCPs. Discuss shortly
+# the reasons for failure and compare the different QCPs against each other.
+
+
+# create qc_df
+
+qc_df <- as.tibble(HOBO_wip)
+
+# remove unused data
+# rm(cal_offset,calib_line,caltime,meas_temp,qc_P,qc_R,toplux,HOBO_wip,my_HOBO,
+#    HOBO_qc)
+
+# if one hour has up to one flag use it
+# if one hour has more than one flag -> NA
+
+# qc_df <- qc_df %>% 
+#   mutate(hour=)
+
+# how many hours do I have??
+
+time_length(time_range, unit="hours") # 912 (912*6 is 5472 so that is correct)
+
+# numbering all hours
+hour_ct <- rep(c(1:912), each = 6)
+# stick it to the df
+qc_df <- cbind(qc_df, h_ct = hour_ct)
+
+# qc_df <- qc_df %>% 
+#   mutate(flag_)
+
+table(qc_df$qc_tot)
+# I have 203 cases but each one has failed only one of the quality checks
+
+test <- qc_df %>% 
+  group_by(., h_ct) %>% 
+  summarize(., sum_flags=sum(qc_all)) %>% 
+  filter(sum_flags>=2)
+# this yields a vector of all hours that must be set to NA
+
