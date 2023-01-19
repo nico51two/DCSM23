@@ -307,8 +307,18 @@ table(qc_df$qc_tot)
 # I have 203 cases but each one has failed only one of the quality checks
 
 test <- qc_df %>% 
-  group_by(., h_ct) %>% 
+  group_by(., h_flag = h_ct) %>% 
   summarize(., sum_flags=sum(qc_all)) %>% 
   filter(sum_flags>=2)
 # this yields a vector of all hours that must be set to NA
+bad_hours <- test$h_flag
 
+qc_df2 <- qc_df
+
+
+# qc_df2 <- qc_df2 %>% 
+#   filter(., h_ct %in% bad_hours) %>% 
+#   temp <- NA
+
+bad_temps <- which(qc_df2$h_ct %in% bad_hours)
+qc_df2$temp[bad_temps] <- NA
