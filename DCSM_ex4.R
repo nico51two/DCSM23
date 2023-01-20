@@ -72,8 +72,8 @@ GAR_raw <- GAR_raw %>%
 
 GAR_raw[390:396,]
 # that's better, now the whole converting and clipping procedure again
-GAR_raw$Lokalzeit <- ymd_hms(GAR_raw$Lokalzeit, tz="Europe/Berlin")
-GAR_raw$UTC <- ymd_hms(GAR_raw$UTC, tz="UTC")
+GAR_raw$Lokalzeit <- ymd_hms(GAR_raw$Lokalzeit)
+GAR_raw$UTC <- ymd_hms(GAR_raw$UTC)
 
 Wdat_GAR <- GAR_raw %>%
   filter(., between(Lokalzeit, start_time, end_time))
@@ -103,6 +103,16 @@ Wdat_DWD <- DWD_raw %>%
   filter(., between(MESS_DATUM, start_time, end_time)) %>% 
   select(., MESS_DATUM, TT_TU) %>% 
   mutate(dttm=dttm)
+
+
+# check datetimes
+# 
+# test <- Wdat_DWD %>% 
+#   select(MESS_DATUM, dttm) %>% 
+#   mutate(Gartime=Wdat_GAR$Lokalzeit) %>% 
+#   mutate(Urbtime=Wdat_URB$MESS_DATUM) %>% 
+#   mutate(wbitime=Wdat_WBI)
+# jawoll this worked...
 
 
 
