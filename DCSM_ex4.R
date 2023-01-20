@@ -114,5 +114,61 @@ Wdat_DWD <- DWD_raw %>%
 #   mutate(wbitime=Wdat_WBI)
 # jawoll this worked...
 
+# stations df
+tempDF <- Wdat_DWD %>% 
+  select(., time=dttm, tempDWD=TT_TU) %>% 
+  mutate(tempURB=Wdat_URB$LUFTTEMPERATUR) %>% 
+  mutate(tempGar=Wdat_GAR$Lufttemperatur...C.) %>% 
+  mutate(tempWBI=Wdat_WBI$temp)
 
 
+# my hobo df
+getwd()
+myHOBO <- read.csv("C:/Users/johan/Desktop/DCSM_home/DCSM23/10min/10350049_Th.csv" )
+
+tempDF <- tempDF %>% 
+  mutate(myHOBO$th)
+
+tempDF <- as_tibble(tempDF)
+tempDF$tempWBI <- as.numeric(tempDF$tempWBI)
+
+tempDF <- cbind(tempDF,HOBOtemp=myHOBO$th)
+tempDF$HOBOtemp <- as.numeric(tempDF$HOBOtemp)
+
+
+date1 <- tempDF$time[210]
+date2 <- tempDF$time[245]
+
+ggplot(tempDF,aes(time))+
+  geom_line(tempDF,mapping=aes(y=tempURB),color="blue")+
+  geom_line(tempDF,mapping=aes(y=tempGar),color="black")+
+  geom_line(tempDF,mapping=aes(y=tempWBI),color="green")+
+  geom_line(tempDF,mapping=aes(y=tempDWD),color="red")+
+  geom_line(tempDF,mapping=aes(y=HOBOtemp),color="purple")+
+  ylim(-5,5)+
+  xlim(c(date1,date2))
+
+
+
+
+# tempDWD mathces the data best
+
+tempDFtest <- tempDF %>% 
+  mutate(HOBOcorr=case_when(is.na(HOBOtemp)~tempDWD,is.numeric(HOBOtemp)~HOBOtemp))
+  
+
+
+# create result df
+
+hobo_hr_corr <- tempDFtest %>% 
+  select(dttm=time, th=HOBOcorr) %>% 
+  mutate(origin="H")
+
+
+hobo_hr_corr$origin[which(is.na(tempDFtest$HOBOtemp))] <- "R"
+
+
+hobo_hr_corr$dttm <- format(hobo_hr_corr$dttm, "%Y-%m-%d %H:%M:%S")
+hobo_hr_corr$th <-  format(hobo_hr_corr$th, digits=3, nsmall=3)
+
+write_csv(hobo_hr_corr, file = "10350049_Th.csv" )
