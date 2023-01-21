@@ -212,13 +212,15 @@ summary(modWBI)
 
 # fill in NA using regression coefficients from the WBI model
 
+predDF <- tibble(HOBOtemp=tempDF$HOBOtemp,tempWBI=tempDF$tempWBI)
 
+preds <- predict(modWBI, tempDF,type="response")
 
+comparison <- tibble(HOBOorig=tempDF$HOBOtemp,
+                     tempWBI=tempDF$tempWBI,
+                     predicted=preds)
 
-
-
-
-
+head(comparison)
 
 
 # create result df
