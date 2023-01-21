@@ -222,18 +222,25 @@ comparison <- tibble(HOBOorig=tempDF$HOBOtemp,
 
 head(comparison)
 
+# make corrected HOBO vector
 
 # create result df
 
-# hobo_hr_corr <- tempDFtest %>% 
-#   select(dttm=time, th=HOBOcorr) %>% 
-#   mutate(origin="H")
+# fill in NAs with model predictions
+
+tempDF <- tempDF %>% 
+  mutate(HOBOcorr=case_when(is.na(HOBOtemp)~preds,is.numeric(HOBOtemp)~HOBOtemp))
 
 
-# hobo_hr_corr$origin[which(is.na(tempDFtest$HOBOtemp))] <- "R"
+hobo_hr_corr <- tempDF %>%
+  select(dttm=time, th=HOBOcorr) %>%
+  mutate(origin="H")
 
 
-# hobo_hr_corr$dttm <- format(hobo_hr_corr$dttm, "%Y-%m-%d %H:%M:%S")
-# hobo_hr_corr$th <-  format(hobo_hr_corr$th, digits=3, nsmall=3)
-# 
-# write_csv(hobo_hr_corr, file = "10350049_Th.csv" )
+hobo_hr_corr$origin[which(is.na(tempDF$HOBOtemp))] <- "R"
+
+
+hobo_hr_corr$dttm <- format(hobo_hr_corr$dttm, "%Y-%m-%d %H:%M:%S")
+hobo_hr_corr$th <-  format(hobo_hr_corr$th, digits=3, nsmall=3)
+
+write_csv(hobo_hr_corr, file = "10350049_Th.csv" )
