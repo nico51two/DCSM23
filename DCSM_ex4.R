@@ -171,6 +171,46 @@ ggplot(tempDF,aes(time))+
   #ylim(-5,5)+
   #xlim(c(date1,date2))
 
+# TODO plot legends and axis labels, color palette
+
+# MODEL 1: WBI
+modWBI <- lm(tempDF$HOBOtemp~tempDF$tempWBI, tempDF)
+summary(modWBI)
+
+# MODEL 2: DWD
+modDWD <- lm(tempDF$HOBOtemp~tempDF$tempDWD, tempDF)
+summary(modDWD)
+
+# MODEL 3: URB
+modURB <- lm(tempDF$HOBOtemp~tempDF$tempURB, tempDF)
+summary(modURB)
+
+# MODEL 4: GAR
+modGAR <- lm(tempDF$HOBOtemp~tempDF$tempGar, tempDF)
+summary(modGAR)
+
+# table of model coefficients & R^2
+
+Intercepts <- c(summary(modDWD)$coefficients[1,4],
+                  summary(modURB)$coefficients[1,4],
+                  summary(modGAR)$coefficients[1,4],
+                  summary(modWBI)$coefficients[1,4])
+
+R_squ <- c(summary(modDWD)$r.squared,
+           summary(modURB)$r.squared,
+           summary(modGAR)$r.squared,
+           summary(modWBI)$r.squared)
+
+stations <- c("DWD","URB","GAR","WBI")
+
+MOD_RES <- arrange(tibble(stations,Intercepts,R_squ))
+
+summary(modWBI)
+# the WBI model sports the best fit according to R^2
+# corroborates what we saw in the plot
+
+
+# fill in NA using regression coefficients from the WBI model
 
 
 
