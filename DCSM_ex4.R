@@ -33,47 +33,54 @@ Wdat_WBI <- WBI_raw %>%
 # FREIBURG Garten station
 GAR_raw <- read.csv("C:/Users/johan/Desktop/DCSM_home/DCSM23/10min/Freiburg_Garten_2022-11-30_2023-01-08.csv")
 # fix date time class
-GAR_raw$Lokalzeit <- ymd_hms(GAR_raw$Lokalzeit, tz="Europe/Berlin")
-GAR_raw$UTC <- ymd_hms(GAR_raw$UTC, tz="UTC")
-class(GAR_raw$Lokalzeit)
-class(GAR_raw$UTC)
+
 # and clip to timeframe
 # Wdat_GAR <- GAR_raw %>%
 #   select(., -UTC) %>%
 #   filter(., between(Lokalzeit, start_time, end_time))
 # for some reason this fails to deliver the correct amount of obs. lines...  timezone trouble?
-last(Wdat_GAR$Lokalzeit)
-last(Wdat_WBI$dttm)
-first(Wdat_GAR$Lokalzeit)
-first(Wdat_WBI$dttm)
+# last(Wdat_GAR$Lokalzeit)
+# last(Wdat_WBI$dttm)
+# first(Wdat_GAR$Lokalzeit)
+# first(Wdat_WBI$dttm)
 # TODO fix this sh**
 # end_time2 <- ymd_hms("2023-01-08 00:00:00")
-Wdat_GAR <- GAR_raw %>% 
-  select(., -UTC) %>% 
-  filter(., between(Lokalzeit, start_time, end_time))
+# Wdat_GAR <- GAR_raw %>% 
+#   select(., -UTC) %>% 
+#   filter(., between(Lokalzeit, start_time, end_time))
 # this seems to work but now i guess the last date is wrong?
-first(Wdat_GAR$Lokalzeit)
-last(Wdat_GAR$Lokalzeit)
-last(Wdat_DWD$MESS_DATUM)
+# first(Wdat_GAR$Lokalzeit)
+# last(Wdat_GAR$Lokalzeit)
+# last(Wdat_DWD$MESS_DATUM)
 # the fuck?
-which((Wdat_GAR$Lokalzeit == dttm))
+# which((Wdat_GAR$Lokalzeit == dttm))
 # so line 371 is the culprit...
-Wdat_GAR[369:375,]
+# Wdat_GAR[369:375,]
 # there's a line missing...why???
-which(GAR_raw$Lokalzeit=="2022-12-16 10:00:00")
-GAR_raw[390:396,]
+# which(GAR_raw$Lokalzeit=="2022-12-16 10:00:00")
+# GAR_raw[390:396,]
 #hmmmmmmmm.... it's also missing in the raw data so i did not ef this up
-GAR_raw <- read.csv("C:/Users/johan/Desktop/DCSM_home/DCSM23/10min/Freiburg_Garten_2022-11-30_2023-01-08.csv")
-which(GAR_raw$Lokalzeit=="2022-12-16 10:00:00")
-GAR_raw[390:396,] # they efd up 11 o clock...
+# GAR_raw <- read.csv("C:/Users/johan/Desktop/DCSM_home/DCSM23/10min/Freiburg_Garten_2022-11-30_2023-01-08.csv")
+# which(GAR_raw$Lokalzeit=="2022-12-16 10:00:00")
+# GAR_raw[390:396,] # they efd up 11 o clock...
 
+# correct missing line in GAR_raw
 GAR_raw <- GAR_raw %>% 
   add_row(UTC = "2022-12-16 10:00:00", Lokalzeit = "2022-12-16 11:00:00", Lufttemperatur...C. = NA, .before = 395)
 
 GAR_raw[390:396,]
 # that's better, now the whole converting and clipping procedure again
+
+# GAR_raw$Lokalzeit <- ymd_hms(GAR_raw$Lokalzeit, tz="Europe/Berlin")
+# GAR_raw$UTC <- ymd_hms(GAR_raw$UTC, tz="UTC")
+# class(GAR_raw$Lokalzeit)
+# class(GAR_raw$UTC)
+
+
+# convert to POSX
 GAR_raw$Lokalzeit <- ymd_hms(GAR_raw$Lokalzeit)
 GAR_raw$UTC <- ymd_hms(GAR_raw$UTC)
+class(GAR_raw$UTC)
 
 Wdat_GAR <- GAR_raw %>%
   filter(., between(Lokalzeit, start_time, end_time))
@@ -121,20 +128,25 @@ tempDF <- Wdat_DWD %>%
   mutate(tempGar=Wdat_GAR$Lufttemperatur...C.) %>% 
   mutate(tempWBI=Wdat_WBI$temp)
 
+# tempWBI still has the comma decimals
+tempDF$tempWBI <- scan(text=tempDF$tempWBI, dec=",", sep=".")
+
 
 # my hobo df
-getwd()
+# getwd()
 myHOBO <- read.csv("C:/Users/johan/Desktop/DCSM_home/DCSM23/10min/10350049_Th.csv" )
 
 tempDF <- tempDF %>% 
   mutate(myHOBO$th)
 
-tempDF <- as_tibble(tempDF)
-tempDF$tempWBI <- as.numeric(tempDF$tempWBI)
+# # tempDF <- as_tibble(tempDF)
+# tempDF$tempWBI <- as.numeric(tempDF$tempWBI)
 
 tempDF <- cbind(tempDF,HOBOtemp=myHOBO$th)
 tempDF$HOBOtemp <- as.numeric(tempDF$HOBOtemp)
 
+
+# manualy zoomed in comparison graph
 
 date1 <- tempDF$time[210]
 date2 <- tempDF$time[245]
@@ -148,27 +160,38 @@ ggplot(tempDF,aes(time))+
   ylim(-5,5)+
   xlim(c(date1,date2))
 
+# tempWBI is the closest fit
+
+ggplot(tempDF,aes(time))+
+  #geom_line(tempDF,mapping=aes(y=tempURB),color="blue")+
+  #geom_line(tempDF,mapping=aes(y=tempGar),color="black")+
+  geom_line(tempDF,mapping=aes(y=tempWBI),color="green")+
+  #geom_line(tempDF,mapping=aes(y=tempDWD),color="red")+
+  geom_line(tempDF,mapping=aes(y=HOBOtemp),color="purple")
+  #ylim(-5,5)+
+  #xlim(c(date1,date2))
 
 
 
-# tempDWD mathces the data best
 
-tempDFtest <- tempDF %>% 
-  mutate(HOBOcorr=case_when(is.na(HOBOtemp)~tempDWD,is.numeric(HOBOtemp)~HOBOtemp))
-  
+
+
+
+
+
 
 
 # create result df
 
-hobo_hr_corr <- tempDFtest %>% 
-  select(dttm=time, th=HOBOcorr) %>% 
-  mutate(origin="H")
+# hobo_hr_corr <- tempDFtest %>% 
+#   select(dttm=time, th=HOBOcorr) %>% 
+#   mutate(origin="H")
 
 
-hobo_hr_corr$origin[which(is.na(tempDFtest$HOBOtemp))] <- "R"
+# hobo_hr_corr$origin[which(is.na(tempDFtest$HOBOtemp))] <- "R"
 
 
-hobo_hr_corr$dttm <- format(hobo_hr_corr$dttm, "%Y-%m-%d %H:%M:%S")
-hobo_hr_corr$th <-  format(hobo_hr_corr$th, digits=3, nsmall=3)
-
-write_csv(hobo_hr_corr, file = "10350049_Th.csv" )
+# hobo_hr_corr$dttm <- format(hobo_hr_corr$dttm, "%Y-%m-%d %H:%M:%S")
+# hobo_hr_corr$th <-  format(hobo_hr_corr$th, digits=3, nsmall=3)
+# 
+# write_csv(hobo_hr_corr, file = "10350049_Th.csv" )
