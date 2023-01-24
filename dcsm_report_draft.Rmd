@@ -258,7 +258,7 @@ num(((qc_result[2]/length(HOBO_wip$qc_all))*100),digits=4)
 # the reasons for failure and compare the different QCPs against each other.
 # create qc_df
 # TODO 
-qc_df <- as.tibble(HOBO_wip)
+qc_df <- as_tibble(HOBO_wip)
 
 # numbering all hours
 hour_ct <- rep(c(1:912), each = 6)
@@ -529,7 +529,6 @@ summary(modWBI)
 
 ```
 
-
 ## 4.2. fill-up
 
 ```{r fill regression}
@@ -593,12 +592,22 @@ con <- dbConnect(drv, host='hydenv.hydrocode.de', port=5432, user='hydenv',
 
 <div class="alert alert-info">Generate a *human readable* overview of all HOBOs for this term.</div>
 
+
+```{R}
+dbListTables(con)
+
+```
+```{r}
+# get meta table 
+HOBO_MTab <- dbReadTable(DB_connection, 'metadata')
+```
+
+Meta table clipped to this year, location cl parsed using st_asewkt()
+
 ```{sql connection=con}
-SELECT  m.id, device_id as "HOBO id", ___ as lon, ___ as lat, full_name as term, description
+SELECT  m.id, device_id as "HOBO id", st_asewkt(location) as location, term_id as term, description
 FROM metadata m
-join terms t on ___
-join sensors s on ___
-WHERE s.name='hobo' AND short='WT22'
+WHERE term_id ='15' and sensor_id ='4'
 ```
 
 ## 5.2	Calculate Indices
@@ -607,27 +616,28 @@ WHERE s.name='hobo' AND short='WT22'
 * Calculate the mean temperature
 * Calculate the mean night temperature
 * Calculate the daytime coefficient of variation
+
+Chaged meta_id to that of my own hobo
+
+```{sql connection=con}
+-- check variable abbrevs
+
+SELECT * FROM variables
+
+
+```
+
+
 </div>
 ```{sql connection=con}
 with timeseries as (
-  select tstamp, value from data WHERE meta_id=150 and variable_id=1   -- replace the id
+  select tstamp, value from data WHERE meta_id=216 and variable_id=1   -- replaced the id
 ),
 mean_temp as (
   select 42 as idx from timeseries   -- change the aggregation
-),
-mean_night as (
-  select 42 as idx from timeseries   -- change the aggregation
-  where date_part('hour', tstamp) == 7 
-),
-day_coeff as (
-  select 42 as idx from timeseries   -- change the aggregation
-  where date_part('hour', tstamp) == 7
 )
+
 select 'mean temperature' as description, idx from mean_temp
-union
-select 'night mean' as description, idx from mean_night
-union
-select 'day var. coeff' as description, idx from day_coeff
 ```
 
 ## 5.3 Create indices table/view/query
