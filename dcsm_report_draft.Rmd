@@ -599,15 +599,15 @@ dbListTables(con)
 ```
 ```{r}
 # get meta table 
-HOBO_MTab <- dbReadTable(DB_connection, 'metadata')
+HOBO_MTab <- dbReadTable(con, 'metadata')
 ```
 
-Meta table clipped to this year, location cl parsed using st_asewkt()
+Meta table clipped to this year, location cl parsed using `sf::st_asewkt()`
 
 ```{sql connection=con}
 SELECT  m.id, device_id as "HOBO id", st_asewkt(location) as location, term_id as term, description
 FROM metadata m
-WHERE term_id ='15' and sensor_id ='4'
+WHERE term_id ='15'
 ```
 
 ## 5.2	Calculate Indices
@@ -620,25 +620,76 @@ WHERE term_id ='15' and sensor_id ='4'
 Chaged meta_id to that of my own hobo
 
 ```{sql connection=con}
--- check variable abbrevs
-
 SELECT * FROM variables
-
+-- vaiable_id 1 is what I need
+```
+```{sql connection = con}
+select * from raw_data limit 10
 
 ```
 
 
-</div>
+
+
+
+my HOBO raw data
 ```{sql connection=con}
-with timeseries as (
-  select tstamp, value from data WHERE meta_id=216 and variable_id=1   -- replaced the id
-),
-mean_temp as (
-  select 42 as idx from timeseries   -- change the aggregation
-)
-
-select 'mean temperature' as description, idx from mean_temp
+create temporary VIEW temperature_index as
+SELECT * FROM raw_data 
+WHERE meta_id = 216 and variable_id = 1 
 ```
+
+
+```{sql connection = con}
+SELECT * FROM temperature_index
+```
+
+
+
+
+```{sql connection=con}
+select AVG(value) as mean from temperature_index
+
+```
+
+now just night
+```{sql connection=con}
+create temporary VIEW temperature_index_night as
+SELECT * FROM raw_data 
+WHERE meta_id = 216 and variable_id = 1 and date_part('hour', tstamp) <= 8 and date_part('hour', tstamp) <= 18
+```
+
+nightly mean temperature
+```{sql connection=con}
+select AVG(value) from temperature_index_night
+```
+
+and just day
+
+```{sql connection=con}
+create temporary VIEW temperature_index_day6 as
+SELECT * FROM raw_data 
+WHERE meta_id = 216 and variable_id = 1 and date_part('hour', tstamp) <= 18 and date_part('hour', tstamp) >=8
+```
+
+```{sql connection=con}
+select * from temperature_index_day6
+```
+
+and the day mean temp
+
+```{sql connection=con}
+select AVG(value) from temperature_index_day6
+```
+
+
+
+
+
+
+
+
+
 
 ## 5.3 Create indices table/view/query
 
