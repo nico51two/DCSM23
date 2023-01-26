@@ -593,11 +593,11 @@ con <- dbConnect(drv, host='hydenv.hydrocode.de', port=5432, user='hydenv',
 <div class="alert alert-info">Generate a *human readable* overview of all HOBOs for this term.</div>
 
 
-```{R}
+```{R list tables}
 dbListTables(con)
 
 ```
-```{r}
+```{r import meta table}
 # get meta table 
 HOBO_MTab <- dbReadTable(con, 'metadata')
 ```
@@ -628,10 +628,6 @@ select * from raw_data limit 10
 
 ```
 
-
-
-
-
 my HOBO raw data
 ```{sql connection=con}
 create temporary VIEW temperature_index as
@@ -643,7 +639,6 @@ WHERE meta_id = 216 and variable_id = 1
 ```{sql connection = con}
 SELECT * FROM temperature_index
 ```
-
 
 
 
@@ -667,28 +662,20 @@ select AVG(value) from temperature_index_night
 and just day
 
 ```{sql connection=con}
-create temporary VIEW temperature_index_day6 as
+create temporary VIEW temperature_index_day as
 SELECT * FROM raw_data 
 WHERE meta_id = 216 and variable_id = 1 and date_part('hour', tstamp) <= 18 and date_part('hour', tstamp) >=8
 ```
 
 ```{sql connection=con}
-select * from temperature_index_day6
+select * from temperature_index_day
 ```
 
 and the day mean temp
 
 ```{sql connection=con}
-select AVG(value) from temperature_index_day6
+select AVG(value) from temperature_index_day
 ```
-
-
-
-
-
-
-
-
 
 
 ## 5.3 Create indices table/view/query
@@ -696,55 +683,185 @@ select AVG(value) from temperature_index_day6
 <div class="alert alert-info">
 Calculate temperature indices for **all** HOBOs of this term: The indices necessary are:
 
-*	Mean temperature
-*	Mean daytime temperature
-*	Mean night temperature
-*	Coefficient of variation
-*	Length of the timeseries
-*	IQR
-</div>
+### create view on this terms hobos temperature
+
+### 5.3.1 this term all hobos
 
 ```{sql connection=con}
-with c as (
-  select m.id, tstamp, value from data d
-  join metadata m on m.id=d.meta_id
-  join terms t on t.id=m.term_id
-  where
 
-
-),
-day as (
-
-),
-night as (
-
-),
-mean as (
-
-),
-coeff as (
-
-),
-idx as (
-  select m.id, mean.mean, day.day_mean, night.night_mean, coeff.var
-  from metadata m
-  natural join day
-  natural join mean
-  natural join night
-  natural join coeff
-)
-
-select * from idx
+create temporary VIEW temperature_index_day as
+SELECT * FROM raw_data 
+WHERE meta_id = 215 and variable_id = 1 and date_part('hour', tstamp) <= 18 and date_part('hour', tstamp) >=8
 ```
+
+
+### create view on this terms hobos temperature
+
+```{sql connection=con}
+
+create temporary VIEW temps_232222 as
+SELECT * FROM raw_data
+WHERE variable_id = 1 and meta_id between 215 and 242
+
+```
+
+
+Using order by desc (I also checked the first few but there seems to be a HOBO missing) 
+```{sql connection=con}
+
+select * from temps_232222
+order by meta_id
+
+```
+
+## mean temperature of all this years hobos
+*	Mean temperature
+
+```{sql connection=con}
+
+select avg(value) from temps_232222
+
+
+```
+
+## all hobo day
+
+create view
+```{sql connection=con}
+create temporary VIEW all_index_day as
+SELECT * FROM raw_data 
+WHERE variable_id = 1 and meta_id between 215 and 242 and date_part('hour', tstamp) <= 18 and date_part('hour', tstamp) >=8
+
+
+```
+
+extract daily mean
+```{sql connection=con}
+select avg(value) from all_index_day
+```
+
+## all hobo night
+hobo nights sure sounds like a song from the 80s
+
+```{sql connection=con}
+
+create temporary VIEW all_index_night as
+SELECT * FROM raw_data 
+WHERE variable_id = 1 and meta_id between 215 and 242 and date_part('hour', tstamp) <= 8 and date_part('hour', tstamp) <= 18
+
+```
+extract mean
+
+```{sql connection=con}
+select avg(value) from all_index_night
+
+```
+
 
 ## 5.4	Switch the dataset (max. 150 words)
 
 <div class="alert alert-info">
 Now apply the same query used in the last task again, but for the other kind of data.
 </div>
+overview of quality controlled data
+```{sql connection=con}
+create temporary VIEW all_qc_temp as
+select * from data 
+where variable_id = 1 and
+meta_id between 215 and 242
+
+```
+
+## all qc temp mean
 
 ```{sql connection=con}
+select avg(value) from all_qc_temp
 
+```
+
+## all qc night mean
+```{sql connection=con}
+create temporary VIEW all_qc_temp_night as
+select * from data 
+where variable_id = 1 and
+meta_id between 215 and 242 and
+date_part('hour', tstamp) <= 8 and date_part('hour', tstamp) <= 18
+```
+
+```{sql connection=con}
+select avg(value) from all_qc_temp_night
+
+```
+
+# all qc day mean
+```{sql connection=con}
+create temporary VIEW all_qc_temp_day as
+select * from data 
+where variable_id = 1 and
+meta_id between 215 and 242 and
+date_part('hour', tstamp) <= 18 and date_part('hour', tstamp) >=8
+```
+
+```{sql connection=con}
+select avg(value) from all_qc_temp_day
+```
+
+## length and coefficient of variation on qc data
+### qc coeff.var.
+```{sql connection = con}
+create temporary view all_qc_varco as
+SELECT stddev_samp(value) / AVG(value) from all_qc_temp_day
+
+```
+```{sql connection = con}
+select * from all_qc_varco
+```
+### qc length
+```{sql connection = con}
+create temporary view qc_length2 as
+select count(distinct tstamp) from
+all_qc_temp
+  
+
+```
+
+```{sql connection=con}
+select * from qc_length2
+
+```
+### raw length
+```{sql connection = con}
+create temporary view raw_length as
+select count(distinct tstamp) from
+temps_232222
+  
+
+```
+
+```{sql connection=con}
+select * from raw_length
+
+```
+
+## funzt nicht
+
+```{sql connection=con}
+with c as (
+  select m.id, tstamp, value from data d
+  join metadata m on m.id=d.meta_id
+  join terms t on t.id=m.term_id
+  where t.id = 15
+),
+mean as (
+select avg(value) as idx from c
+
+),
+idx as (
+  select m.id, mean
+  from metadata m
+  natural join mean
+)
+select distinct * from idx order by mean
 ```
 
 <div class="alert alert-info">Disscuss differences between the two tables: Are there differences? Which indices are affected most? Why?</div>
