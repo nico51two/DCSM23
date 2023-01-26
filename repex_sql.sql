@@ -1,4 +1,3 @@
-
 with c as (
   select m.id, tstamp, value from data d
   join metadata m on m.id=d.meta_id
@@ -14,4 +13,4 @@ idx as (
   from metadata m
   natural join mean
 )
-select distinct * from idx
+select distinct * from idx order by mean
