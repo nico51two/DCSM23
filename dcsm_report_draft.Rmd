@@ -531,7 +531,7 @@ MOD_RES <- arrange(tibble(R_squ,stations,Intercepts))
 
 ```
 The following tibble displays the compiled results of the R<sup>2</sup> extraction. p-values were discarded as they are not meaningful for correlation coefficients.
-```{r }
+```{r R2 table}
 MOD_RES %>% 
   arrange(., desc(R_squ))
 ```
@@ -567,10 +567,15 @@ hobo_hr_corr$th <-  format(hobo_hr_corr$th, digits=3, nsmall=3)
 write_csv(hobo_hr_corr, file = "10350049_Th.csv" )
 ```
 
+Plot showing corrected data
+```{r TODO PLOT}
+# TODO make plot of filled in time series
+```
+
 
 # 5.	Calculate indices
 
-Calculation of indices was done using Postgresql 
+Calculation of indices was done using Postgresql within this very Rmarkdown document.
 
 The following chunk establishes connection to the database
 ```{r setup_sql}
@@ -598,62 +603,54 @@ WHERE term_id ='15'
 
 ## 5.2	Calculate Indices
 
-My own HOBOs raw measurements were pulled from the database using the corresponding meta id from the meta table using the following query (output limited for readability). To include only temperature measurements in the `VIEW` the `variable_id` was specified. Necessary information was gathered by querying the `variables` table (not included in this document).
+As per the assignment a number of indices were derived from both raw and quality checked data of individual HOBOs as well as of all of this terms HOBOs.
 
-my HOBO raw data
+### Indices of own HOBO raw data
+
+My own HOBOs raw measurements were pulled from the database using the corresponding meta id from the meta table using the following query (output limited for readability). To include only temperature measurements in the `VIEW` the `variable_id` was specified. Necessary information on the variable key was gathered by querying the `variables` table (not included in this document).
 ```{sql connection=con}
 create temporary VIEW temperature_index as
 SELECT * FROM raw_data 
 WHERE meta_id = 216 and variable_id = 1 
 ```
 
+### Mean Temperature
 
-```{sql connection = con}
-SELECT * FROM temperature_index
-```
-
-
-
+Using `AVG()` to calculate the mean temperature:
 ```{sql connection=con}
 select AVG(value) as mean from temperature_index
 
 ```
 
-now just night
+### Mean Night Temperature
+
+The same process was repeated for mean temperature at night time only by adding a `WHERE` clause to the query:
 ```{sql connection=con}
 create temporary VIEW temperature_index_night as
 SELECT * FROM raw_data 
 WHERE meta_id = 216 and variable_id = 1 and date_part('hour', tstamp) <= 8 and date_part('hour', tstamp) <= 18
 ```
-
-nightly mean temperature
+Aggregation:
 ```{sql connection=con}
 select AVG(value) from temperature_index_night
 ```
 
-and just day
+### Mean Day Temperature
 
+This is the same process as above only with the `WHERE` clause inverted:
 ```{sql connection=con}
 create temporary VIEW temperature_index_day as
 SELECT * FROM raw_data 
 WHERE meta_id = 216 and variable_id = 1 and date_part('hour', tstamp) <= 18 and date_part('hour', tstamp) >=8
 ```
-
-```{sql connection=con}
-select * from temperature_index_day
-```
-
-and the day mean temp
-
+Aggregation of daytime temperature:
 ```{sql connection=con}
 select AVG(value) from temperature_index_day
 ```
 
-
 ## 5.3 Create indices table/view/query
 
-<div class="alert alert-info">
-Calculate temperature indices for **all** HOBOs of this term: The indices necessary are:
+Similar indices were computed for all of this terms HOBO by constructing a series of slightly more complex queries
 
 ### create view on this terms hobos temperature
 
