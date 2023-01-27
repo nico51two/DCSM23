@@ -31,6 +31,7 @@ library(sf) # to handle shapefiles and CRS
 library(lubridate) # to parse and convert time objects
 library(zoo) # to extend the apply family of functions (rolling window)
 library(microbenchmark) # to measure function performance
+library(wesanderson) # for discrete colors in plots
 ```
 
 ### Preprocessing / R functions
@@ -46,6 +47,13 @@ flagP <- function(x){  # function flags values in quality check 3 (variability)
   ifelse(length(unique(x)) == 1, 1,0)  # no variability -> 1 unique val
 }                      # must be applied using a rolling window 
 
+pw <- function () { # to ask for password when connecting to database
+  if (Sys.getenv('POSTGRES_PASSWORD') == ""){
+    return(getPass('Provide the password: '))
+  } else {
+    return(Sys.getenv('POSTGRES_PASSWORD'))
+  }
+}
 ```
 
 # 1. Hobo meta informations
@@ -260,6 +268,8 @@ This is the reason why the light intensity check never resulted in a positive fl
 
 ### 3.2 Summary of quality checks
 
+#### QC Aggregation
+
 The following chunk compiles the results of the quality checks, extracts the failed data points as a percentage and overwrites all failed data points with `NA`.
 ```{r flag summary, warning=F,message=F,echo=F}
 # analyse occurence of flags and aggregate qc fails 
@@ -294,8 +304,11 @@ qc_df2 <- qc_df
 bad_temps <- which(qc_df2$h_ct %in% bad_hours)
 qc_df2$temp[bad_temps] <- NA
 ```
+
+#### QC Analysis
+
 Display percentage of data points failing the quality checks in total:
-```{r}
+```{r qc percentage}
 perc <- num(((qc_result[2]/length(HOBO_wip$qc_all))*100),digits=4)
 perc[1]
 ```
@@ -317,28 +330,24 @@ table(is.na(hrly_dat$mean_temp))
 num((50/length(hrly_dat$mean_temp))*100,digits = 4)
 
 ```
-50 hours suffered from bad data points and were replaced by NAs. This results in an NA share of 5.5%.
+50 hours suffered from bad data points and were replaced by NAs. This results in an NA share of 5.5%. The following table shows the failed qc in absolute numbers:
 
 ```{r summarize}
 qc_res_tab <- tibble('impl. r.o.c.'=length(which(qc_df2$qc_R==1)),
        'impl. persistence'=length(which(qc_df2$qc_P==1)),
        'impl. light intensity'=0,
        'o.o. meas. range'=0)
+qc_res_tab
 ```
-
+This barplot shows that the overwhelming majority of positive flags were found in the persistence check with some positive flags in the rate of change plausibility check:
 ```{r qc barplot}
-barplot(as.matrix(qc_res_tab), cex.names = 0.5, main = "No. of occurences per quality check")
+barplot(as.matrix(qc_res_tab), cex.names = 0.5, main = "No. of failed hourly data points per quality check", cex.main=0.8)
 ```
 
-## 3.3. Aggregate
+#### Write quality checked file
 
-```{r agg}
-# TODO separate aggregation chunk
-```
-
-
-**Task**: At the end of the code section above you should generate one! tibble or data.frame named `hobo_hourly` with averaged temperature values per hour or NA values (if the hour is flagged as bad data). See exercise description for more details.
-
+The quality checked file is being written to the parent directory of this file
+as `10350049_Th.csv` after using `format()` to format the decimals and date/time:
 ```{r write qc file}
 dttm <- seq(start_time, end_time, by= "hours")
 
@@ -357,23 +366,23 @@ write_csv(hobo_hourly, file = "10350049_Th.csv" )
 
 # 4. Fill-up with reference station
 
-## 4.1. reference station
+The lines of the quality checked data that have previsouly been taken out and replaced with NAs must now be substituted by values predicted by a linear regression on the basis of data from a reference station.
 
-```{r ref station}
+## 4.1. Reference Station
 
-# fill up all the NA in your
-# hobo_hourly from chapter 3.3 based on a regression model between your station
-# and a reference station. 
+The data from the reference stations was manually download from their respective sources and imported. The following chunk takes care of this and also reads the qc data from the preceding step back into the workspace from the disk. A missing line in the data from the `Freiburg Garten` Station, a weirdly formatted timestamp and comma glyphs as a decimal separator were the pitfalls encountered here. All could be tended to using the functions `format()` and `scan()`.
+```{r ref station, warning=F,message=F,echo=F}
+# Weather stations import:
 
 # WBI Station
 # data import from hdd
 WBI_raw <- read.csv("Stunde_096.csv", sep=";")
 # convert to proper POSX or ld object
 WBI_raw$Tag <- dmy(WBI_raw$Tag)
-class(WBI_raw$Tag)
+# class(WBI_raw$Tag)
 # works semi well with this timestamp...
 WBI_raw$Stunde <- hm(WBI_raw$Stunde)
-class(WBI_raw$Stunde)
+# class(WBI_raw$Stunde)
 
 # i'll make my own
 # declare time frame
@@ -387,8 +396,6 @@ Wdat_WBI <- WBI_raw %>%
   filter(.,between(Tag, date(start_time), date(end_time))) %>% 
   select(.,temp=AVG_TA200) %>% 
   mutate(dttm=dttm)
-# TODO format the timestamp to get rid of seconds eventually (if the assignment says so)
-
 
 # FREIBURG Garten station
 GAR_raw <- read.csv("Freiburg_Garten_2022-11-30_2023-01-08.csv")
@@ -397,26 +404,17 @@ GAR_raw <- read.csv("Freiburg_Garten_2022-11-30_2023-01-08.csv")
 GAR_raw <- GAR_raw %>% 
   add_row(UTC = "2022-12-16 10:00:00", Lokalzeit = "2022-12-16 11:00:00", Lufttemperatur...C. = NA, .before = 395)
 
-GAR_raw[390:396,]
+# GAR_raw[390:396,]
 # that's better, now the whole converting and clipping procedure again
-
-# GAR_raw$Lokalzeit <- ymd_hms(GAR_raw$Lokalzeit, tz="Europe/Berlin")
-# GAR_raw$UTC <- ymd_hms(GAR_raw$UTC, tz="UTC")
-# class(GAR_raw$Lokalzeit)
-# class(GAR_raw$UTC)
-
 
 # convert to POSX
 GAR_raw$Lokalzeit <- ymd_hms(GAR_raw$Lokalzeit)
 GAR_raw$UTC <- ymd_hms(GAR_raw$UTC)
-class(GAR_raw$UTC)
+# class(GAR_raw$UTC)
 
 Wdat_GAR <- GAR_raw %>%
   filter(., between(Lokalzeit, start_time, end_time))
 # this took way too long...
-
-
-
 
 # Freiburg Stadtklimastation
 URB_raw <- read.csv("produkt_air_temperature_13667_akt.txt", sep = ";")
@@ -427,9 +425,7 @@ Wdat_URB <- URB_raw %>%
   filter(.,between(MESS_DATUM, start_time, end_time)) %>% 
   select(MESS_DATUM, LUFTTEMPERATUR) %>% 
   mutate(dttm = dttm)
-# phew..correct nr of observations this time..can deselect orig. timestamp later 
-# TODO
-
+# phew..correct nr of observations this time..
 
 # DWD Station 1443
 DWD_raw <- read.csv("produkt_tu_stunde_20210718_20230118_01443.txt", sep = ";")
@@ -440,86 +436,85 @@ Wdat_DWD <- DWD_raw %>%
   select(., MESS_DATUM, TT_TU) %>% 
   mutate(dttm = dttm)
 
-
-# check datetimes
-# 
-# test <- Wdat_DWD %>% 
-#   select(MESS_DATUM, dttm) %>% 
-#   mutate(Gartime=Wdat_GAR$Lokalzeit) %>% 
-#   mutate(Urbtime=Wdat_URB$MESS_DATUM) %>% 
-#   mutate(wbitime=Wdat_WBI)
-# jawoll this worked...
-
 # stations df
 tempDF <- Wdat_DWD %>% 
   select(., time = dttm, tempDWD = TT_TU) %>% 
   mutate(tempURB = Wdat_URB$LUFTTEMPERATUR) %>% 
   mutate(tempGar = Wdat_GAR$Lufttemperatur...C.) %>% 
   mutate(tempWBI = Wdat_WBI$temp)
-
 # tempWBI still has the comma decimals
 tempDF$tempWBI <- scan(text=tempDF$tempWBI, dec = ",", sep = ".")
 
-
 # my hobo df
-# getwd()
 myHOBO <- read.csv("10350049_Th.csv" )
 
 tempDF <- tempDF %>% 
   mutate(myHOBO$th)
-
-# # tempDF <- as_tibble(tempDF)
-# tempDF$tempWBI <- as.numeric(tempDF$tempWBI)
-
+# format:
 tempDF <- cbind(tempDF,HOBOtemp = myHOBO$th)
 tempDF$HOBOtemp <- as.numeric(tempDF$HOBOtemp)
+ 
+```
+### Visual identification of best suited reference station
 
+Before any statistical analysis was done to find which reference station best matches the data I performed a visual analysis that shows where there are gaps in the temperature data and which reference stations data might be able to fill them:
+```{r reference plot, warning=F,echo=F}
 
-# manualy zoomed in comparison graph
-
-date1 <- tempDF$time[210]
+date1 <- tempDF$time[210] # zoom in to time with many NAs
 date2 <- tempDF$time[245]
 
-ggplot(tempDF,aes(time))+
-  geom_line(tempDF,mapping=aes(y=tempURB),color = "blue")+
-  geom_line(tempDF,mapping=aes(y=tempGar),color = "black")+
-  geom_line(tempDF,mapping=aes(y=tempWBI),color = "green")+
-  geom_line(tempDF,mapping=aes(y=tempDWD),color = "red")+
-  geom_line(tempDF,mapping=aes(y=HOBOtemp),color = "purple")+
-  ylim(-5,5)+
-  xlim(c(date1,date2))
-
+# overview plot
+plot1 <- ggplot(tempDF,aes(time))+
+    geom_line(tempDF,mapping=aes(y=tempURB),color=wescols[1])+
+    geom_line(tempDF,mapping=aes(y=tempGar),color=wescols[2])+
+    geom_line(tempDF,mapping=aes(y=tempWBI),color=wescols[3])+
+    geom_line(tempDF,mapping=aes(y=tempDWD),color=wescols[4])+
+    geom_line(tempDF,mapping=aes(y=HOBOtemp),color=wescols[5])+
+    ylim(-20,25)
 # tempWBI is the closest fit
 
-ggplot(tempDF,aes(time))+
-  #geom_line(tempDF,mapping=aes(y=tempURB),color="blue")+
-  #geom_line(tempDF,mapping=aes(y=tempGar),color="black")+
-  geom_line(tempDF,mapping=aes(y=tempWBI),color="green")+
-  #geom_line(tempDF,mapping=aes(y=tempDWD),color="red")+
-  geom_line(tempDF,mapping=aes(y=HOBOtemp),color="purple")
-  #ylim(-5,5)+
-  #xlim(c(date1,date2))
+# manualy zoomed in comparison graph
+plot2 <- ggplot(tempDF,aes(x=time))+
+    geom_line(tempDF,mapping=aes(y=tempURB,color='URB'))+
+    geom_line(tempDF,mapping=aes(y=tempGar,color='GAR'))+
+    geom_line(tempDF,mapping=aes(y=tempWBI,color='WBI'))+
+    geom_line(tempDF,mapping=aes(y=tempDWD,color='DWD'))+
+    geom_line(tempDF,mapping=aes(y=HOBOtemp,color='HOB'))+
+    ylim(-3,1)+
+    xlim(c(date1,date2))+
+    labs(x="\n\nTime",y="\nTemperature in deg. C.")+
+    ggtitle("HOBO and ref. station temperature zoomed in")+
+    scale_color_manual(name="Station",breaks=c('URB','GAR','WBI','DWD','HOB'),
+                       values = c("URB"="#E2D200", "GAR"="#5B1A18",
+                                  "WBI"="#F21A00", "DWD"="#E58601",
+                                  "HOB"="#5BBCD6"))
+```
+The overview plot is not included here because it's hard to make out which station fits best but by limiting the time frame to a time with many NAs the graph already gives a clear answer as to which stations data fits best:
+```{r stations plot,warning=F}
+plot2
+```
+Apparently the WBI station matches the HOBO data fairly well, especially around the NA gaps with. In the next step a linear model was created for every station to extract R<sup>2</sup> values to make a final decision on which station to use:
 
-# TODO plot legends and axis labels, color palette
+### Statistical identification of best suited reference station
 
+```{r linear model, echo=FALSE, message=FALSE, results='hide',warning=F}
 # MODEL 1: WBI
 modWBI <- lm(tempDF$HOBOtemp~tempDF$tempWBI, tempDF)
-summary(modWBI)
+#summary(modWBI)
 
 # MODEL 2: DWD
 modDWD <- lm(tempDF$HOBOtemp~tempDF$tempDWD, tempDF)
-summary(modDWD)
+#summary(modDWD)
 
 # MODEL 3: URB
 modURB <- lm(tempDF$HOBOtemp~tempDF$tempURB, tempDF)
-summary(modURB)
-
+#summary(modURB)
+#
 # MODEL 4: GAR
 modGAR <- lm(tempDF$HOBOtemp~tempDF$tempGar, tempDF)
-summary(modGAR)
+#summary(modGAR)
 
 # table of model coefficients & R^2
-
 Intercepts <- c(summary(modDWD)$coefficients[1,4],
                   summary(modURB)$coefficients[1,4],
                   summary(modGAR)$coefficients[1,4],
@@ -532,68 +527,53 @@ R_squ <- c(summary(modDWD)$r.squared,
 
 stations <- c("DWD","URB","GAR","WBI")
 
-MOD_RES <- arrange(tibble(stations,Intercepts,R_squ))
-
-summary(modWBI)
-# the WBI model sports the best fit according to R^2
-# corroborates what we saw in the plot
-
+MOD_RES <- arrange(tibble(R_squ,stations,Intercepts))
 
 ```
+The following tibble displays the compiled results of the R<sup>2</sup> extraction. p-values were discarded as they are not meaningful for correlation coefficients.
+```{r }
+MOD_RES %>% 
+  arrange(., desc(R_squ))
+```
+The DWD Urban station sports the best fit according to RR<sup>2</sup> so it will be used to fill the gaps with predicted values from its regression on the HOBO data.
 
 ## 4.2. fill-up
 
+Predictions were made using `lm.predict()` function and labeled as "R" while original HOBO measurements were labeled as "H".
 ```{r fill regression}
-
-# fill in NA using regression coefficients from the WBI model
-
-predDF <- tibble(HOBOtemp=tempDF$HOBOtemp,tempWBI=tempDF$tempWBI)
-
-preds <- predict(modWBI, tempDF,type="response")
-
+# prediction
+predDF <- tibble(HOBOtemp=tempDF$HOBOtemp,tempURB=tempDF$tempURB)
+preds <- predict(modURB, tempDF,type="response")
+# compile for comparing
 comparison <- tibble(HOBOorig=tempDF$HOBOtemp,
-                     tempWBI=tempDF$tempWBI,
+                     tempURB=tempDF$tempURB,
                      predicted=preds)
 
-head(comparison)
-
-# make corrected HOBO vector
-
-# create result df
-
-# fill in NAs with model predictions
-
+# identify NAs to fill and fill with preds
 tempDF <- tempDF %>% 
   mutate(HOBOcorr=case_when(is.na(HOBOtemp)~preds,is.numeric(HOBOtemp)~HOBOtemp))
 
-
+# fill origin col with H for HOBO
 hobo_hr_corr <- tempDF %>%
   select(dttm=time, th=HOBOcorr) %>%
   mutate(origin="H")
-
-
+# and with R for regression
 hobo_hr_corr$origin[which(is.na(tempDF$HOBOtemp))] <- "R"
 
-
+# format timestamp and values
 hobo_hr_corr$dttm <- format(hobo_hr_corr$dttm, "%Y-%m-%d %H:%M:%S")
 hobo_hr_corr$th <-  format(hobo_hr_corr$th, digits=3, nsmall=3)
-
+# write to disk, overwriting the NA ridden file
 write_csv(hobo_hr_corr, file = "10350049_Th.csv" )
-
-
 ```
 
 
 # 5.	Calculate indices
-```{r setup_sql, include=FALSE}
-pw <- function () {
-  if (Sys.getenv('POSTGRES_PASSWORD') == ""){
-    return(getPass('Provide the password: '))
-  } else {
-    return(Sys.getenv('POSTGRES_PASSWORD'))
-  }
-}
 
+Calculation of indices was done using Postgresql 
+
+The following chunk establishes connection to the database
+```{r setup_sql}
 # establish the connection
 drv <- dbDriver('PostgreSQL')
 con <- dbConnect(drv, host='hydenv.hydrocode.de', port=5432, user='hydenv', 
@@ -602,20 +582,14 @@ con <- dbConnect(drv, host='hydenv.hydrocode.de', port=5432, user='hydenv',
 
 ## 5.1.	Generate metadata overview
 
-<div class="alert alert-info">Generate a *human readable* overview of all HOBOs for this term.</div>
+A 'human readable' file showing the HOBO locations and descriptions was pulled from the online database and saved to the R workspace for convenience.
 
-
-```{R list tables}
-dbListTables(con)
-
-```
-```{r import meta table}
+```{r import meta table,warning=F}
 # get meta table 
 HOBO_MTab <- dbReadTable(con, 'metadata')
 ```
 
-Meta table clipped to this year, location cl parsed using `sf::st_asewkt()`
-
+Meta table clipped to this year by specifying the 'term id' (gathered from the table overview not included here); location attribute parsed using `sf::st_asewkt()`.
 ```{sql connection=con}
 SELECT  m.id, device_id as "HOBO id", st_asewkt(location) as location, term_id as term, description
 FROM metadata m
@@ -624,21 +598,7 @@ WHERE term_id ='15'
 
 ## 5.2	Calculate Indices
 
-<div class="alert alert-info">Calculate temperature indices for only one timeseries. You can pick any HOBO you like. Needed indices:
-* Calculate the mean temperature
-* Calculate the mean night temperature
-* Calculate the daytime coefficient of variation
-
-Chaged meta_id to that of my own hobo
-
-```{sql connection=con}
-SELECT * FROM variables
--- vaiable_id 1 is what I need
-```
-```{sql connection = con}
-select * from raw_data limit 10
-
-```
+My own HOBOs raw measurements were pulled from the database using the corresponding meta id from the meta table using the following query (output limited for readability). To include only temperature measurements in the `VIEW` the `variable_id` was specified. Necessary information was gathered by querying the `variables` table (not included in this document).
 
 my HOBO raw data
 ```{sql connection=con}
