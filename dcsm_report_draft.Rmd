@@ -652,11 +652,57 @@ select AVG(value) from temperature_index_day
 
 Similar indices were computed for all of this terms HOBO by constructing a series of slightly more complex queries
 
-### 5.3.1 this term all hobos
+### 5.3.1 Winter term 2023 all HOBOs raw data
 
-Daily and nightly mean as well as full day mean and were calculated for the quality checked hourly data of all available HOBO measurements of the 2023 term.
+Daily and nightly mean as well as full day mean and coefficient of variation were calculated for the non-quality checked 10 minute (raw) data of all available HOBO measurements of the 2023 term.
 
-```{sql connection=con}
+
+```{sql connection=con, output.var = "idx_raw"}
+with c as (
+  select m.id, tstamp, value from raw_data r
+  join metadata m on m.id=r.meta_id
+  join terms t on t.id=m.term_id
+  where t.id = 15 and variable_id = 1
+),
+mean as (
+select id, avg(value) as mean_full from c
+group by id
+
+),
+coevar as (
+select id, stddev(value)/avg(value) as co_var from c
+group by id
+
+),
+night as (
+select id, avg(value) as night_temp from c
+where date_part('hour', tstamp) < 8 or date_part('hour', tstamp) >= 20
+group by id
+
+),
+day as (
+select id, avg(value) as day_temp from c
+where date_part('hour', tstamp) > 8 or date_part('hour', tstamp) <= 20
+group by id
+
+),
+idx as (
+  select m.id, mean.mean_full, night.night_temp, day.day_temp, coevar.co_var
+  from metadata m
+  natural join mean
+  natural join night
+  natural join day
+  natural join coevar
+)
+select * from idx order by idx.id
+```
+
+
+### Winter term 2023 all HOBOs quality checked hourly data
+
+Apart from having to `select` the data from a different table (i.e. `data` as opposed to the quality checked hourly `raw_data` table) the only difference to the preceding query is that it was not necessary to filter for the correct variable because this table only contains the temperature measurements and not light intensity.
+
+```{sql connection=con, output.var = "idx_qc"}
 with c as (
   select m.id, tstamp, value from data d
   join metadata m on m.id=d.meta_id
@@ -681,31 +727,39 @@ where date_part('hour', tstamp) > 8 or date_part('hour', tstamp) <= 20
 group by id
 
 ),
+coevar as (
+select id, stddev(value)/avg(value) as co_var from c
+group by id
+
+),
 idx as (
-  select m.id, mean.mean_full, night.night_temp, day.day_temp
+  select m.id, mean.mean_full, night.night_temp, day.day_temp, coevar.co_var
   from metadata m
   natural join mean
   natural join night
   natural join day
+  natural join coevar
 )
 select * from idx order by idx.id
 ```
 
-<div class="alert alert-info">Disscuss differences between the two tables: Are there differences? Which indices are affected most? Why?</div>
+
+### Differences of raw data and qc data indices
+
+Apart from the length (the qc data has fewer entries) the main differences can be gathered from the following table:
 
 ## 5.5 Combine the table with R
 
-<div class="alert alert-info">
-In R, calculate **either** of the following indices and finally merge the two tables:
-*	Mean time lag between maximum light intensity and maximum temperature
+In R, calculate 
 *	Mean of the maximum daily temperature change (per hour)
-</div>
 
 First, download the data you want to use:
-```{sql connection=con, output.var="my.temp"}
+```{sql connection=con, output.var="my_temp"}
 -- Select only your hobo, or directly all you need
-SELECT tstamp, value from data where meta_id=150 and variable_id = 1
+SELECT tstamp, value from data where meta_id=217 and variable_id = 1
 ```
+
+
 ```{r}
 # Now, apply the index calculation
 calc <- function(df) {
@@ -754,6 +808,8 @@ SELECT d.name as district, ref.name as "reference station", d.geom as geometry
 FROM ___
 WHERE ___
 ```
+
+
 ```{r}
 # This is just a suggestion
 dist <- read_sf(con, query="SELECT * from solution_62", quiet=T)
