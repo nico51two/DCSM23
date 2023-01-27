@@ -22,20 +22,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ### Loaded packages
 
-```{r libraries, results=F}
+```{r libraries, results=FALSE, message=FALSE}
 # Load packages
-require(RPostgreSQL)
-require(getPass)
-library(tidyverse)
-library(sf)
-library(lubridate)
+require(RPostgreSQL) # for database handling
+require(getPass) # for the getPass() function
+library(tidyverse) # for dplyr, ggplot, ...
+library(sf) # to handle shapefiles and CRS
+library(lubridate) # to parse and convert time objects
 library(zoo) # to extend the apply family of functions (rolling window)
+library(microbenchmark) # to measure function performance
 ```
 
 ### Preprocessing / R functions
 
 ```{r preprocessing, message=FALSE, warning=FALSE}
-# If data preprocessing is needed, do it here.
+# self made functions used:
 # functions:
 flagR <- function(x) { # function to flag values in quality check 1
   ifelse(x>=1, 1,0)    # sets flag to 0 when passed, to 1 when failed
@@ -49,37 +50,35 @@ flagP <- function(x){  # function flags values in quality check 3 (variability)
 
 # 1. Hobo meta informations
 
-Hobo picture and description
+The HOBO was situated in an upside down planter, shielded from direct sunlight and placed in a hedge with no direct influence from any nearby buildings or the like.
 
 ![image of my Hobo](./10350049.jpg){width=250px}
 
 
 # 2. Consistent HOBO data file
-Read in from GitHub
+
+The raw data was read in from GitHub. For importing the data the base R function `read.csv()` was used:
 ```{r raw_data, eval=T}
 # Load data from Github (then eval = TRUE)
 my_HOBO <- read.csv("https://raw.githubusercontent.com/data-hydenv/data/master/hobo/2023/raw/10350049.csv", skip = 1)
 # Load calibration file from GitHub
 t_cal <- read.csv("https://raw.githubusercontent.com/data-hydenv/data/master/hobo/2023/calibration.csv")
 ```
-Date/Time column must be parsed properly:
+Date/Time column must be parsed properly. This was done using `lubridate::mdy_hms()`.
 ```{r parse datetime}
 my_HOBO$Datum.Zeit..GMT.01.00 <- mdy_hms(my_HOBO$Datum.Zeit..GMT.01.00)
-
 ```
-
-Tidy up and rename the columns
+Tidy up and sensibly rename the columns:
 ```{r tidy_cols}
 my_HOBO <- as_tibble(my_HOBO) %>% 
   select(., 1:4) %>% 
   rename(id = 1, dttm = 2, temp = 3, lux = 4)
-
 head(my_HOBO)
 ```
 
-
 ## 2.1. Calibration
-The calibration data from GitHub is a table of the time when the calibration measurement was performed and the target value temperature. 
+
+The calibration data from GitHub is a table of the time when the calibration measurement was performed and the target value temperature. Both items were extracted and displayed with 3 decimal places. This is purely for show because R does exact calculations under the hood independently of the displayed decimals. The calculated calibration offset was then added to the temperature measurements.
 
 ```{r calibration}
 caltime <- t_cal$This.is.the.calibration.value[3] # time of calibration
@@ -104,10 +103,10 @@ cal_offset <- as.numeric(cal_offset[1])
 my_HOBO$temp <- my_HOBO$temp-cal_offset # subtract offset from raw temperature
 ```
 
-
 ## 2.2. create HOBO data file
-Truncate data to the given time frame. First declare the target start and end
-time using ´lubridate::ymd_hms´.
+
+Truncate data to the given time frame: First declared the target start and end
+time using `lubridate::ymd_hms` again:
 ```{r truncate raw data}
 start_time <- ymd_hms("2022-12-01 00:00:00") # start point
 end_time <- ymd_hms("2023-01-07 23:50:00") # end point
@@ -128,38 +127,58 @@ my_HOBO$lux <-  format(my_HOBO$lux, digits=3, nsmall=3) # and in light intensity
 
 my_HOBO$dttm <- format(my_HOBO$dttm, "%Y-%m-%d %H:%M") # timestamp format
 ```
-The `tibble: my_HOBO` was then written to disk and uploaded to GitHub.
+The `tibble: my_HOBO` was then written to disk and manually uploaded to GitHub.
 ```{r write hobo file}
 # write to file
 write_csv(my_HOBO, file = "10350049.csv")
 ```
 
-## 2.3. verify your file
+## 2.3. Verify your file
+
+### Benchmark import function performance
+
+Two classic import functions were used for this performance test: `baseR:read.csv` and `readr:read_csv`. The following chunk might take a little while to finish:
+```{r benchmark import, results=FALSE, message=FALSE}
+perf_test <- microbenchmark(
+  "readr" = {read_test <- read_csv("10350049.csv")},
+  "read.csv" = {read_test <- read.csv("10350049.csv")}
+)
+
+```
+Benchmark results:
+```{r benchmark result}
+perf_test
+```
+The reason why `baseR:read.csv()` performed much faster in this test is because `readr:read_csv()` tried to guess the column data types but throws a warning on the datetime column (which is muted in the chunk output). Informing the function by passing the respective information as arguments to the function call would likely improve the performance dramatically. Nevertheless I decided to stick with `read.csv()` because I prefer parsing such data with `lubridate` anyway.
+
+### Verification of import
+
+Inspection of the file that was imported using `readr::read_csv()`:
+```{r verify import}
+head(read_test)
+```
 
 # 3. Quality control
-Read the data back in from GitHub...
-```{r formated_data}
+
+Reading the data back in from GitHub to maintain order:
+```{r formated_data, message=F}
 # Load data from Github (then eval = TRUE)
 HOBO_qc <- read.csv("https://raw.githubusercontent.com/data-hydenv/data/master/hobo/2023/10_minutes/10350049.csv")
-head(data)
-
 ```
 ## 3.1. Quality control procedures (QCPs)
 
 ### 3.1.1. Measurement range (Plausible values)
-...and check both value ranges.
+
+Checking the value ranges of both the light intensity and temperature data shows that all data points were well within the measurement range of the device. Quality check 1 passed.
 ```{r qcp1, eval=T}
 # TODO NAs
 range(HOBO_qc$temp)
 range(HOBO_qc$lux)
 ```
 
-**Question**: How many data points are outside the measurement range?
-
-**Answer**: None
-
 ### 3.1.2. Plausible rate of change
 
+No temperature data point should differ from the preceding 10 minute steps by more than 1° Kelvin. A lagged (i.e. shifted forward in time by 10 minutes) of the temperature vector was created and subtracted from the temperature to yield a delta value that can then be inspected: 
 ```{r qcp2}
 # lag one column, then mutate difference to new column
 HOBO_wip <- HOBO_qc %>% 
@@ -168,10 +187,7 @@ HOBO_wip <- HOBO_qc %>%
 
 range(na.omit(HOBO_wip$delta)) # delta values out of legal range?
 ```
-
-**Question**: Describe shortly how many data points failed during this QCP and discuss whether there is a certain daytime pattern of failure or not?
-
-**Answer**:
+The range of delta values shows that there are in fact data points that violate this quality check.
 
 ```{r flag qcp2}
 qc_R <- sapply(HOBO_wip$delta,flagR) # apply flagging function 
@@ -179,97 +195,92 @@ qc_R <- sapply(HOBO_wip$delta,flagR) # apply flagging function
 HOBO_wip <- cbind(HOBO_wip,qc_R) # collect results in new data frame
 
 length(which(qc_R==1)) # count occurence of bad data points
-# TODO day/night pattern?
+
 ```
+Since only 24 data points failed the check it's feasible and worthwhile to inspect them manually:
+
+```{r inspect qcp2, warning=F}
+bad_temps <- HOBO_wip[which(qc_R==1),2:3] %>% # extract suspicious data 
+  arrange(., desc(hm(dttm))) # order by hour and minute
+bad_temps # display
+```
+This clearly shows that temperature change of more than 1 K per 10 minutes mostly happened at noon and sunrise with some occurrences right after sunset when rapid cooling is somewhat expected. These data points might not be faulty per se.
 
 ### 3.1.3. Minimum variability (Persistence)
-Use `zoo::rollapply()` to run the persistence check over a moving time window of 
-6 time steps (i.e. 60 minutes).
+
+Using `zoo::rollapply()` to run the persistence check over a moving time window of 6 time steps (i.e. 60 minutes). The function simply detects and flags each set of 6 time steps when the number of unique temperature values within is only 1.
 ```{r, flag qcp3}
 qc2 <- rollapply(HOBO_wip$delta, width=6,FUN=flagP) # width parameter is window
 ```
-
-**Task**: Code in this section should analyse the persistence.
-
-```{r persistence}
-# TODO
-```
-
-Compile results
-
+Compiling the results of the preceding quality checks in a tibble:
 ```{r qc3 results}
 qc_P <- c(1:length(HOBO_wip$delta)) # vector to store persistence flag
 qc_P[1:5] <- NA # manually fill positions 1 through 5
 qc_P[6:length(qc_P)] <- qc2 # append results
 HOBO_wip <- cbind(HOBO_wip,qc_P) # collect in tibble
 ```
-
+Looking at the failing data points of the persistence check in detail:
+```{r persistence analysis,warning=F}
+bad_pers <- HOBO_wip[which(qc_P==1),2:3] %>% # extract suspicious data 
+  arrange(., desc(hm(dttm))) # order by hour and minute
+hist(bad_pers$temp, breaks = 50, main = "Temp. data points failing persistence check",
+     xlab = "Temperature in Deg. Celsius")
+```
+The histogram shows that the majority of the failing data points happened at a temperature of -5°C to +5°C. This is not so unrealistic especially when considering that the HOBO was well shielded from sunlight (which will be shown in the next quality check).
 
 ### 3.1.4. Light intensity
-The HOBO was situated in a planter at all times so there was no disturbance of
-the light measurement.
-```{r qcp4}
-hist(HOBO_wip$lux, breaks = 25)
-summary(HOBO_wip$lux)
-sd(HOBO_wip$lux)
-toplux <- filter(HOBO_wip,lux<=500 & lux>1)
-hist(toplux$lux,breaks=50)
-```
 
-Assign SICs from SOURCE!!! to light measurement data points
+The HOBO was situated in a planter at all times so only very limited disturbance of the light measurement should have occurred.
+```{r qcp4}
+summary(HOBO_wip$lux)
+```
+We can gather from the summary that the range of light intensity values is as expected and the HOBO has never seen bright and direct sunlight during the time of interest.
+
+To extract more systematic information about the quality of the light intensity data a set of sky illuminance classes were assigned to the data:
 ```{r assign SIC}
 HOBO_wip <- HOBO_wip %>% 
-  mutate(SIC = case_when(lux <= 10 ~ 'Night_0',
-                         lux <= 500 ~ 'Rise_Set_1',
-                         lux <= 2000 ~ 'Overcast_full_2',
-                         lux <= 15000 ~ 'Overcast_light_3',
-                         lux <= 20000 ~ 'Clear_4',
-                         lux < 50000 ~ 'Sunshine_5',
-                         lux >= 50000 ~ 'Brightshine_6',
+  mutate(SIC = case_when(lux <= 10 ~ '0_night',
+                         lux <= 500 ~ '1_rise_Set',
+                         lux <= 2000 ~ '2_overcast_full',
+                         lux <= 15000 ~ '3_overcast_light',
+                         lux <= 20000 ~ '4_clear',
+                         lux < 50000 ~ '5_sunshine',
+                         lux >= 50000 ~ '6_brightshine',
                          ))
 
 unique(HOBO_wip$SIC) # only the first four SICs present
 ```
-**Task**: Discuss shortly how often and when during daytime the QCP4 flags bad data. Elaborate on some reasons for your results.
+This check corroborates what was stated above: The hedge and planter effectively shielded the light intensity sensor from direct sunlight. The brightest SIC the HOBO was exposed to was "Overcast (light)".
 
-**Answer**:
-```{r flag summary}
+```{r}
+summary(as_factor(HOBO_wip$SIC))
+```
+This is the reason why the light intensity check never resulted in a positive flag for the light intensity. The HOBO simply detected SICs that are associated with dusk, dawn and night in the majority of cases. Occurrences of SIC: Overcast (light) is the brightest SIC detected and only in 10 cases.
+
+
+### 3.2 Summary of quality checks
+
+The following chunk compiles the results of the quality checks, extracts the failed data points as a percentage and overwrites all failed data points with `NA`.
+```{r flag summary, warning=F,message=F,echo=F}
 # analyse occurence of flags and aggregate qc fails 
 HOBO_wip <- HOBO_wip %>% 
   mutate(qc_tot = qc_P + qc_R)
 
 HOBO_wip$qc_tot[1:5] <- 0
 
-
 HOBO_wip <- HOBO_wip %>% 
   mutate(qc_all = case_when(qc_tot == 0 ~ 0,
                    qc_tot != 0 ~ 1))
 
-# as percentage
-
+# as percentage:
 qc_result <- table(HOBO_wip$qc_all)
 
-qc_result
-
-
-num(((qc_result[2]/length(HOBO_wip$qc_all))*100),digits=4)
-# TODO
-# Present a table or graph to show how many data points fail during the four specific QCPs. Discuss shortly
-# the reasons for failure and compare the different QCPs against each other.
-# create qc_df
-# TODO 
-qc_df <- as_tibble(HOBO_wip)
+qc_df <- as_tibble(HOBO_wip) # write to df
 
 # numbering all hours
 hour_ct <- rep(c(1:912), each = 6)
 # stick it to the df
 qc_df <- cbind(qc_df, h_ct = hour_ct)
-
-# qc_df <- qc_df %>% 
-#   mutate(flag_)
-
-table(qc_df$qc_tot)
-# I have 203 cases but each one has failed only one of the quality checks
 
 test <- qc_df %>% 
   group_by(., h_flag = h_ct) %>% 
@@ -277,17 +288,22 @@ test <- qc_df %>%
   filter(sum_flags>=2)
 # this yields a vector of all hours that must be set to NA
 bad_hours <- test$h_flag
-
+# create df
 qc_df2 <- qc_df
-
+# overwrite with NA
 bad_temps <- which(qc_df2$h_ct %in% bad_hours)
 qc_df2$temp[bad_temps] <- NA
 ```
-Share of NAs
-```{r NA share}
-# Calculate the share of NAs in your hourly time-series in % and write it into the
-# meta table (sheet: “Quality
+Display percentage of data points failing the quality checks in total:
+```{r}
+perc <- num(((qc_result[2]/length(HOBO_wip$qc_all))*100),digits=4)
+perc[1]
+```
+Of all data points in the 10-minute time series 3.7% failed the quality check and were replaced by NAs.
 
+For the share of NAs in the hourly data set this means that all hours containing failed data points must be set to NA yielding a higher share of NAs in the hourly time series:
+```{r NA share}
+# Calculate the share of NAs in your hourly time-series in % 
 
 hrly_dat <- qc_df2 %>% 
   group_by(., h_ct) %>% 
@@ -301,22 +317,18 @@ table(is.na(hrly_dat$mean_temp))
 num((50/length(hrly_dat$mean_temp))*100,digits = 4)
 
 ```
-
-
-## 3.2. Summarize
+50 hours suffered from bad data points and were replaced by NAs. This results in an NA share of 5.5%.
 
 ```{r summarize}
-# code for summarizing here
-# TODO
+qc_res_tab <- tibble('impl. r.o.c.'=length(which(qc_df2$qc_R==1)),
+       'impl. persistence'=length(which(qc_df2$qc_P==1)),
+       'impl. light intensity'=0,
+       'o.o. meas. range'=0)
 ```
 
-**Task**: Present a table or graph to show how many data points fail during the four specific QCPs. Discuss shortly the reasons for failure and compare the different QCPs against each other.
-
-**Answer**:
-
-**Task**: At the end of the code section above you should generate one! tibble or data.frame named `qc_df` with all time information, all data points (temperature and lux) and your outcomes of the different QCPs.
-
-**Answer**:
+```{r qc barplot}
+barplot(as.matrix(qc_res_tab), cex.names = 0.5, main = "No. of occurences per quality check")
+```
 
 ## 3.3. Aggregate
 
