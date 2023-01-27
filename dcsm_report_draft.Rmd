@@ -260,7 +260,7 @@ unique(HOBO_wip$SIC) # only the first four SICs present
 ```
 This check corroborates what was stated above: The hedge and planter effectively shielded the light intensity sensor from direct sunlight. The brightest SIC the HOBO was exposed to was "Overcast (light)".
 
-```{r}
+```{r light check summary}
 summary(as_factor(HOBO_wip$SIC))
 ```
 This is the reason why the light intensity check never resulted in a positive flag for the light intensity. The HOBO simply detected SICs that are associated with dusk, dawn and night in the majority of cases. Occurrences of SIC: Overcast (light) is the brightest SIC detected and only in 10 cases.
@@ -464,13 +464,13 @@ date1 <- tempDF$time[210] # zoom in to time with many NAs
 date2 <- tempDF$time[245]
 
 # overview plot
-plot1 <- ggplot(tempDF,aes(time))+
-    geom_line(tempDF,mapping=aes(y=tempURB),color=wescols[1])+
-    geom_line(tempDF,mapping=aes(y=tempGar),color=wescols[2])+
-    geom_line(tempDF,mapping=aes(y=tempWBI),color=wescols[3])+
-    geom_line(tempDF,mapping=aes(y=tempDWD),color=wescols[4])+
-    geom_line(tempDF,mapping=aes(y=HOBOtemp),color=wescols[5])+
-    ylim(-20,25)
+#plot1 <- ggplot(tempDF,aes(time))+
+    # geom_line(tempDF,mapping=aes(y=tempURB),color=wescols[1])+
+    # geom_line(tempDF,mapping=aes(y=tempGar),color=wescols[2])+
+    # geom_line(tempDF,mapping=aes(y=tempWBI),color=wescols[3])+
+    # geom_line(tempDF,mapping=aes(y=tempDWD),color=wescols[4])+
+    # geom_line(tempDF,mapping=aes(y=HOBOtemp),color=wescols[5])+
+    # ylim(-20,25)
 # tempWBI is the closest fit
 
 # manualy zoomed in comparison graph
@@ -756,8 +756,9 @@ Apart from the length (the qc data has fewer entries) the main differences can b
 
 ## 5.5 Combine the table with R
 
-Mean of the maximum daily temperature change (per hour) of one HOBO
+### Max daily temperature change of one HOBO
 
+Mean of the maximum daily temperature change (per hour) of one HOBO:
 Data import from database:
 ```{sql connection=con, output.var="my_temp"}
 -- Selecting only the first HOBO
@@ -773,7 +774,7 @@ idx_my_temp <- my_temp %>% # one hobo temps and dates
 
 ```
 
-And for all of this terms HOBOs
+### Max daily temperature change of all of this terms HOBOs
 
 Get data from database
 ```{sql connection=con, output.var="all_temp_23"}
@@ -782,17 +783,54 @@ SELECT meta_id, tstamp, value from data where meta_id between 217 and 242
 and variable_id = 1
 ```
 
-
-
-
-
-
-Finally, with the index in place, download the indices overview as created in the last two tasks and combine them in R into one overview table:
+And calculate for all of this terms HOBOs
 ```{r}
-# place your code here  -- you can delete my code if you don't want to use it
-postgres.idx <- dbGetQuery(con, 'SELECT * FROM yourview/select statement')
-left_join(my.idx, postgres.idx, by=c('meta_id', 'meta_id')) %>%
-  View()
+idx_all_temp <- all_temp_23 %>% # one hobo temps and dates
+  mutate(lagged=lag(value)-value) %>% # calc delta per 10 mins
+  group_by(meta_id=meta_id) %>% # this time also group by meta id first
+  group_by(day=date(tstamp)) %>% # group by day
+  mutate(max_delta_day=max(abs(lagged))) %>% # get max delta of day
+  ungroup() # fold out
+
+```
+
+Obviously these procedures produce NAs in incomplete days and do not yet yield the required mean.
+
+### Combine in one table
+
+
+```{r}
+
+fin_tab <- HOBO_MTab %>% 
+  filter(between(id, 217, 242)) %>% 
+  arrange(id)
+
+fin_idx_all <- idx_all_temp %>% 
+  select(meta_id, max_delta_day) %>% 
+  filter(between(meta_id, 217, 242)) %>% 
+  dplyr::group_by(meta_id)
+  
+fin_idx_all$meta_id <- as.factor(fin_idx_all$meta_id)
+
+# test <- fin_idx_all %>% 
+#   dplyr::group_by(meta_id) %>% 
+#   dplyr::summarize(., avgMaxD = mean(max_delta_day, na.rm=TRUE))
+
+
+# test <- fin_idx_all %>% 
+#   dplyr::group_by(as.factor(meta_id)) %>% 
+#   na.omit() %>% 
+#   dplyr::summarise(avgDmax=mean(max_delta_day))
+
+metaTabId <- unique(fin_idx_all$meta_id)
+avgMaxDelt <- numeric(length = length(metaTabId))
+
+for (i in 1:length(metaTabId)) {
+  id_sub <- subset(fin_idx_all, meta_id==metaTabId[i])
+  avgMaxDelt[i] <- mean(id_sub$max_delta_day,na.rm=T)
+  
+}
+
 ```
 
 # 6. Spatial analysis
