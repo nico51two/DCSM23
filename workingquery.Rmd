@@ -1,0 +1,50 @@
+---
+title: "workingsql"
+author: "Nico Binder"
+date: "2023-01-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{sql}
+```{sql connection=con}
+with c as (
+  select m.id, tstamp, value from data d
+  join metadata m on m.id=d.meta_id
+  join terms t on t.id=m.term_id
+  where t.id = 15
+),
+mean as (
+select id, avg(value) as idx from c
+group by id
+
+
+),
+night as (
+select id, avg(value) as night_temp from c
+where date_part('hour', tstamp) < 8 or date_part('hour', tstamp) >= 20
+group by id
+
+),
+day as (
+select id, avg(value) as day_temp from c
+where date_part('hour', tstamp) > 8 or date_part('hour', tstamp) <= 20
+group by id
+
+),
+idx as (
+  select m.id, mean.idx, night.night_temp, day.day_temp
+  from metadata m
+  natural join mean
+  natural join night
+  natural join day
+)
+select * from idx order by idx.idx
+```
+```
+
