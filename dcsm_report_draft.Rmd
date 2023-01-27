@@ -703,6 +703,7 @@ select * from idx order by idx.id
 Apart from having to `select` the data from a different table (i.e. `data` as opposed to the quality checked hourly `raw_data` table) the only difference to the preceding query is that it was not necessary to filter for the correct variable because this table only contains the temperature measurements and not light intensity.
 
 ```{sql connection=con, output.var = "idx_qc"}
+-- TODO comment these
 with c as (
   select m.id, tstamp, value from data d
   join metadata m on m.id=d.meta_id
@@ -746,29 +747,45 @@ select * from idx order by idx.id
 
 ### Differences of raw data and qc data indices
 
-Apart from the length (the qc data has fewer entries) the main differences can be gathered from the following table:
+Apart from the length (the qc data has fewer entries) the main differences can be gathered from the table constructed in the following chunk:
+
+```{r}
+
+# TODO aggregated table of indices goes here
+```
 
 ## 5.5 Combine the table with R
 
-In R, calculate 
-*	Mean of the maximum daily temperature change (per hour)
+Mean of the maximum daily temperature change (per hour) of one HOBO
 
-First, download the data you want to use:
+Data import from database:
 ```{sql connection=con, output.var="my_temp"}
--- Select only your hobo, or directly all you need
+-- Selecting only the first HOBO
 SELECT tstamp, value from data where meta_id=217 and variable_id = 1
 ```
-
-
+And calculation:
 ```{r}
-# Now, apply the index calculation
-calc <- function(df) {
-  # your index calculation
-}
-my.idx <- calc(my.temp)
+idx_my_temp <- my_temp %>% # one hobo temps and dates
+  mutate(lagged=lag(value)-value) %>% # calc delta per 10 mins
+  group_by(day=date(tstamp)) %>% # group by day
+  mutate(max_delta=max(abs(lagged))) %>% # get max delta of day
+  ungroup() # fold out
 
-head(my.temp)
 ```
+
+And for all of this terms HOBOs
+
+Get data from database
+```{sql connection=con, output.var="all_temp_23"}
+-- Selecting only the first HOBO
+SELECT meta_id, tstamp, value from data where meta_id between 217 and 242
+and variable_id = 1
+```
+
+
+
+
+
 
 Finally, with the index in place, download the indices overview as created in the last two tasks and combine them in R into one overview table:
 ```{r}
