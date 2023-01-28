@@ -27,11 +27,11 @@ knitr::opts_chunk$set(echo = TRUE)
 require(RPostgreSQL) # for database handling
 require(getPass) # for the getPass() function
 library(tidyverse) # for dplyr, ggplot, ...
-library(sf) # to handle shapefiles and CRS
+#library(sf) # to handle shapefiles and CRS
 library(lubridate) # to parse and convert time objects
 library(zoo) # to extend the apply family of functions (rolling window)
 library(microbenchmark) # to measure function performance
-library(wesanderson) # for discrete colors in plots
+#library(wesanderson) # for discrete colors in plots
 ```
 
 ### Preprocessing / R functions
@@ -785,16 +785,33 @@ and variable_id = 1
 
 And calculate for all of this terms HOBOs
 ```{r}
-idx_all_temp <- all_temp_23 %>% # one hobo temps and dates
-  mutate(lagged=lag(value)-value) %>% # calc delta per 10 mins
-  group_by(meta_id=meta_id) %>% # this time also group by meta id first
-  group_by(day=date(tstamp)) %>% # group by day
-  mutate(max_delta_day=max(abs(lagged))) %>% # get max delta of day
-  ungroup() # fold out
+idx_all_temp <- all_temp_23 %>% # all hobo temps and dates
+  mutate(lagged=lag(value)) %>% # calc delta per 10 mins
+  mutate(delt_T=abs(lagged-value))
+# this yields the max temp change per day
 
+library(data.table)
+
+idx_all_temp <- idx_all_temp %>% 
+  mutate(day_=date(tstamp))
+
+idx2 <- setDT(idx_all_temp)
+
+
+maxDtemp <- idx2[ , MX:=max(delt_T), by = list(day_, meta_id)] 
+# this finally yields the max delta of temperature PER DAY AND META ID
+
+maxDtemp <- na.omit(maxDtemp) # strip NAs
+meanDtemp <- maxDtemp[, AVG:=mean(MX), by = meta_id]
+# and this yields the mean of each HOBOs max delta temp
+
+HOBOs23 <- meanDtemp %>% 
+  select(meta_id,day_,AVG) %>% 
+  group_by(meta_id) %>% 
+  summarise(avgMxDelta=max(AVG))
 ```
 
-Obviously these procedures produce NAs in incomplete days and do not yet yield the required mean.
+
 
 ### Combine in one table
 
@@ -805,31 +822,71 @@ fin_tab <- HOBO_MTab %>%
   filter(between(id, 217, 242)) %>% 
   arrange(id)
 
-fin_idx_all <- idx_all_temp %>% 
-  select(meta_id, max_delta_day) %>% 
-  filter(between(meta_id, 217, 242)) %>% 
-  dplyr::group_by(meta_id)
-  
-fin_idx_all$meta_id <- as.factor(fin_idx_all$meta_id)
+# for some reason this does not work and it's driving me mad
+# fin_idx_all <- idx_all_temp %>% 
+#   select(meta_id, max_delta_day) %>% 
+#   filter(between(meta_id, 217, 242)) %>% 
+#   dplyr::group_by(meta_id) %>%
+#   summarize(avgMaxD=mean(max_delta_day,na.rm=T)) %>% 
+#   mutate(avgMaxD=avgMaxD) %>% 
+#   ungroup()
 
-# test <- fin_idx_all %>% 
-#   dplyr::group_by(meta_id) %>% 
-#   dplyr::summarize(., avgMaxD = mean(max_delta_day, na.rm=TRUE))
+m_IDs <- unique(fin_tab$id)
+
+idx_23_temp <- idx_all_temp %>% 
+  filter(between(meta_id, 217, 242))
+
+common_IDs <- intersect(m_IDs, idx_23_temp$meta_id)
+
+# idx_23_temp <- idx_all_temp %>% 
+#   filter(meta_id %in% common_IDs)
 
 
-# test <- fin_idx_all %>% 
-#   dplyr::group_by(as.factor(meta_id)) %>% 
-#   na.omit() %>% 
-#   dplyr::summarise(avgDmax=mean(max_delta_day))
+in_com <- which(idx_23_temp$meta_id %in% common_IDs)
 
-metaTabId <- unique(fin_idx_all$meta_id)
-avgMaxDelt <- numeric(length = length(metaTabId))
+idx_23_temp <- idx_23_temp[in_com,]
 
-for (i in 1:length(metaTabId)) {
-  id_sub <- subset(fin_idx_all, meta_id==metaTabId[i])
-  avgMaxDelt[i] <- mean(id_sub$max_delta_day,na.rm=T)
-  
+idx_23_temp <- idx_23_temp %>% 
+  arrange(meta_id)
+
+unique(idx_23_temp$meta_id)
+
+fin_tab <- fin_tab %>% 
+  filter(id %in% common_IDs)
+
+fin_tab <- fin_tab %>% 
+  arrange(id)
+
+fin_tab$id
+
+unique(idx_23_temp$meta_id)
+
+fin_tab$id == unique(idx_23_temp$meta_id)
+
+avgMaxD <- numeric(length = length(fin_tab$id))
+
+for (i in 1:length(fin_tab$id)) {
+  sub_i <- filter(idx_23_temp, meta_id==fin_tab$id[i])
+  mDelt_i <- sub_i$max_delta_day
+  mDelt_i <- mDelt_i[!is.na(mDelt_i)]
+  avgMaxD[i] <- sum(mDelt_i)/length(mDelt_i)
 }
+
+i <- 11
+sub_i <- filter(idx_23_temp, meta_id==fin_tab$id[i])
+mDelt_i <- sub_i$max_delta_day
+mDelt_i <- mDelt_i[!is.na(mDelt_i)]
+sum(mDelt_i/length(mDelt_i))
+
+ii <- 12
+sub_ii <- filter(idx_23_temp, meta_id==fin_tab$id[ii])
+mDelt_ii <- sub_ii$max_delta_day
+mDelt_ii <- mDelt_ii[!is.na(mDelt_ii)]
+sum(mDelt_ii/length(mDelt_ii))
+
+mDelt_i==mDelt_ii
+
+
 
 ```
 
