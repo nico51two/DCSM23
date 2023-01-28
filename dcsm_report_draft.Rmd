@@ -788,9 +788,19 @@ And calculate for all of this terms HOBOs
 idx_all_temp <- all_temp_23 %>% # all hobo temps and dates
   mutate(lagged=lag(value)) %>% # calc delta per 10 mins
   mutate(delt_T=abs(lagged-value))
-# this yields the max temp change per day
+# this yields the max temp change per day (absolute)
 
-library(data.table)
+# for some reason this does not work and it's driving me mad
+# you're welcome to try and find my error
+# fin_idx_all <- idx_all_temp %>% 
+#   select(meta_id, max_delta_day) %>% 
+#   filter(between(meta_id, 217, 242)) %>% 
+#   dplyr::group_by(meta_id) %>%
+#   summarize(avgMaxD=mean(max_delta_day,na.rm=T)) %>% 
+#   mutate(avgMaxD=avgMaxD) %>% 
+#   ungroup()
+
+# library(data.table) # dplyr/sf/plyr namespace problems (?) made me use this
 
 idx_all_temp <- idx_all_temp %>% 
   mutate(day_=date(tstamp))
@@ -806,12 +816,9 @@ meanDtemp <- maxDtemp[, AVG:=mean(MX), by = meta_id]
 # and this yields the mean of each HOBOs max delta temp
 
 HOBOs23 <- meanDtemp %>% 
-  select(meta_id,day_,AVG) %>% 
-  group_by(meta_id) %>% 
+  group_by(meta_id) %>%
   summarise(avgMxDelta=max(AVG))
 ```
-
-
 
 ### Combine in one table
 
@@ -822,71 +829,9 @@ fin_tab <- HOBO_MTab %>%
   filter(between(id, 217, 242)) %>% 
   arrange(id)
 
-# for some reason this does not work and it's driving me mad
-# fin_idx_all <- idx_all_temp %>% 
-#   select(meta_id, max_delta_day) %>% 
-#   filter(between(meta_id, 217, 242)) %>% 
-#   dplyr::group_by(meta_id) %>%
-#   summarize(avgMaxD=mean(max_delta_day,na.rm=T)) %>% 
-#   mutate(avgMaxD=avgMaxD) %>% 
-#   ungroup()
-
-m_IDs <- unique(fin_tab$id)
-
-idx_23_temp <- idx_all_temp %>% 
-  filter(between(meta_id, 217, 242))
-
-common_IDs <- intersect(m_IDs, idx_23_temp$meta_id)
-
-# idx_23_temp <- idx_all_temp %>% 
-#   filter(meta_id %in% common_IDs)
-
-
-in_com <- which(idx_23_temp$meta_id %in% common_IDs)
-
-idx_23_temp <- idx_23_temp[in_com,]
-
-idx_23_temp <- idx_23_temp %>% 
-  arrange(meta_id)
-
-unique(idx_23_temp$meta_id)
-
-fin_tab <- fin_tab %>% 
-  filter(id %in% common_IDs)
-
-fin_tab <- fin_tab %>% 
-  arrange(id)
-
-fin_tab$id
-
-unique(idx_23_temp$meta_id)
-
-fin_tab$id == unique(idx_23_temp$meta_id)
-
-avgMaxD <- numeric(length = length(fin_tab$id))
-
-for (i in 1:length(fin_tab$id)) {
-  sub_i <- filter(idx_23_temp, meta_id==fin_tab$id[i])
-  mDelt_i <- sub_i$max_delta_day
-  mDelt_i <- mDelt_i[!is.na(mDelt_i)]
-  avgMaxD[i] <- sum(mDelt_i)/length(mDelt_i)
-}
-
-i <- 11
-sub_i <- filter(idx_23_temp, meta_id==fin_tab$id[i])
-mDelt_i <- sub_i$max_delta_day
-mDelt_i <- mDelt_i[!is.na(mDelt_i)]
-sum(mDelt_i/length(mDelt_i))
-
-ii <- 12
-sub_ii <- filter(idx_23_temp, meta_id==fin_tab$id[ii])
-mDelt_ii <- sub_ii$max_delta_day
-mDelt_ii <- mDelt_ii[!is.na(mDelt_ii)]
-sum(mDelt_ii/length(mDelt_ii))
-
-mDelt_i==mDelt_ii
-
-
+# join idx_qc (contains indices computed on the DB)
+# HOBO_MTab (contains meta info, location)
+# HOBOs23 (contains avg Max Temp Delta)
 
 ```
 
