@@ -833,6 +833,9 @@ fin_tab <- HOBO_MTab %>%
 # HOBO_MTab (contains meta info, location)
 # HOBOs23 (contains avg Max Temp Delta)
 
+full_hobos <- merge(x=idx_qc, y=fin_tab, by="id", sort = TRUE) 
+
+full_hobos <- merge(x=full_hobos, y=HOBOs23, by.y = "meta_id", by.x = "id")
 ```
 
 # 6. Spatial analysis
