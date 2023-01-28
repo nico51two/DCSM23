@@ -3,8 +3,8 @@ title: 'Data management protocol'
 author: "N** B**"
 date: "date of submission"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
   html_notebook:
     toc: yes
     toc_float: yes
@@ -234,6 +234,8 @@ bad_pers <- HOBO_wip[which(qc_P==1),2:3] %>% # extract suspicious data
 hist(bad_pers$temp, breaks = 50, main = "Temp. data points failing persistence check",
      xlab = "Temperature in Deg. Celsius")
 ```
+
+
 The histogram shows that the majority of the failing data points happened at a temperature of -5°C to +5°C. This is not so unrealistic especially when considering that the HOBO was well shielded from sunlight (which will be shown in the next quality check).
 
 ### 3.1.4. Light intensity
@@ -271,7 +273,7 @@ This is the reason why the light intensity check never resulted in a positive fl
 #### QC Aggregation
 
 The following chunk compiles the results of the quality checks, extracts the failed data points as a percentage and overwrites all failed data points with `NA`.
-```{r flag summary, warning=F,message=F,echo=F}
+```{r flag summary, warning=F,message=F}
 # analyse occurence of flags and aggregate qc fails 
 HOBO_wip <- HOBO_wip %>% 
   mutate(qc_tot = qc_P + qc_R)
@@ -371,7 +373,7 @@ The lines of the quality checked data that have previsouly been taken out and re
 ## 4.1. Reference Station
 
 The data from the reference stations was manually download from their respective sources and imported. The following chunk takes care of this and also reads the qc data from the preceding step back into the workspace from the disk. A missing line in the data from the `Freiburg Garten` Station, a weirdly formatted timestamp and comma glyphs as a decimal separator were the pitfalls encountered here. All could be tended to using the functions `format()` and `scan()`.
-```{r ref station, warning=F,message=F,echo=F}
+```{r ref station, warning=F,message=F}
 # Weather stations import:
 
 # WBI Station
@@ -493,6 +495,7 @@ The overview plot is not included here because it's hard to make out which stati
 ```{r stations plot,warning=F}
 plot2
 ```
+
 Apparently the WBI station matches the HOBO data fairly well, especially around the NA gaps with. In the next step a linear model was created for every station to extract R<sup>2</sup> values to make a final decision on which station to use:
 
 ### Statistical identification of best suited reference station
@@ -535,7 +538,7 @@ The following tibble displays the compiled results of the R<sup>2</sup> extracti
 MOD_RES %>% 
   arrange(., desc(R_squ))
 ```
-The DWD Urban station sports the best fit according to RR<sup>2</sup> so it will be used to fill the gaps with predicted values from its regression on the HOBO data.
+The DWD Urban station sports the best fit according to R<sup>2</sup> so it will be used to fill the gaps with predicted values from its regression on the HOBO data.
 
 ## 4.2. fill-up
 
@@ -589,6 +592,7 @@ plot3 <- ggplot(tempDF,aes(x=time))+
 ```{r}
 plot3
 ```
+
 Looking at the graph (showing the full time series) now makes it clear why the URB station was best suited for the regression. Trends and peaks are very similar with only a little offset (URB temperature is a bit higher most of the time).
 
 # 5.	Calculate indices
@@ -614,7 +618,7 @@ HOBO_MTab <- dbReadTable(con, 'metadata')
 
 Meta table clipped to this year by specifying the 'term id' (gathered from the table overview not included here); location attribute parsed using `sf::st_asewkt()`.
 
-```{sql connection=con, output.var=HOBO_MTab }
+```{sql connection=con, output.var="HOBO_MTab" }
 SELECT  m.id, device_id as "HOBO id", st_x(location) as lon, st_y(location) as lat, term_id as term, description
 FROM metadata m
 WHERE term_id ='15'
@@ -803,21 +807,11 @@ and variable_id = 1
 ```
 
 And calculate for all of this terms HOBOs
-```{r}
+```{r mean max daily change 23, warning=F, message=F}
 idx_all_temp <- all_temp_23 %>% # all hobo temps and dates
   mutate(lagged=lag(value)) %>% # calc delta per 10 mins
   mutate(delt_T=abs(lagged-value))
 # this yields the max temp change per day (absolute)
-
-# for some reason this does not work and it's driving me mad
-# you're welcome to try and find my error
-# fin_idx_all <- idx_all_temp %>% 
-#   select(meta_id, max_delta_day) %>% 
-#   filter(between(meta_id, 217, 242)) %>% 
-#   dplyr::group_by(meta_id) %>%
-#   summarize(avgMaxD=mean(max_delta_day,na.rm=T)) %>% 
-#   mutate(avgMaxD=avgMaxD) %>% 
-#   ungroup()
 
 library(data.table) # dplyr/sf/plyr namespace problems (?) made me use this
 
@@ -845,8 +839,8 @@ library(dplyr)
 ### Combine in one table
 
 
-```{r}
-
+```{r join tables}
+# prep meta table
 fin_tab <- HOBO_MTab %>% 
   filter(between(id, 217, 242)) %>% 
   arrange(id)
@@ -859,6 +853,15 @@ full_hobos <- merge(x=idx_qc, y=fin_tab, by="id", sort = TRUE)
 
 full_hobos <- merge(x=full_hobos, y=HOBOs23, by.y = "meta_id", by.x = "id")
 ```
+
+A bit of the finished table:
+
+```{r}
+head(full_hobos)
+```
+
+
+
 
 # 6. Spatial analysis
 
@@ -873,50 +876,6 @@ Filter the database for only the city districts, that contain a reference statio
 
 First, create a sub-query/view/with statement containing all reference stations. Then extent this with the needed filter
 
-```{r}
-
-dbListTables(con)
-
-```
-
-```{sql connection=con}
-
-create temporary view oview as
-select * from osm_nodes
-
-select * from oview
-```
-
-
-```{sql connection=con}
-create temporary view geo_dat as
-with ref as (
-  select 'DWD 1443' as name, ___ as geom union
-  select 'DWD 13667' as name, ___  as geom union
-  select 'Uni FR Meteo' as name, ___  as geom union
-  select 'WBI' as name, ___ as geom
-),
-districts as (
-  select name, geom from osm_nodes where node_type='district'
-)
-
-SELECT d.name as district, ref.name as "reference station", d.geom as geometry 
-FROM ___
-WHERE ___
-```
-
-
-```{r}
-# This is just a suggestion
-dist <- read_sf(con, query="SELECT * from solution_62", quiet=T)
-plot_ly() %>% 
-  add_sf(data=dist, ...) %>%
-    layout(
-      mapbox=list(style="stamen-terrain", zoom=10., center=list(lon=7.8, lat=48), pitch=15), 
-      legend=list(orientation='h'))
-```
-
-
 ## 6.3	Aggregate by location 
 
 <div class="alert alert-info">
@@ -925,35 +884,11 @@ Repeat the procedure for the HOBO locations of WT21 or WT22 (or both). Are there
 </div>
 
 
-```{sql connection=con}
-with districts as (
-  select n.name, count(m.*) as hobos, n.geom from metadata m 
-  join osm_nodes n on 
-  where term_id = 42 and 
-  group by n.name, n.geom
-)
-select * from districts 
-where hobos >= 42
-order by hobos desc
-```
-
-
 ## 6.4	Creating a map 
 
 <div class="alert alert-info">
 Use the queries constructed in the last task to create a map of Freiburg, that illustrates differences in one (or more) of the temperature indices between the city districts of Freiburg. You can create this map either in R or in QGis.
 </div>
-
-Get the data here:
-```{sql connection=con}
-
-```
-
-Either include the map or make the visualization here:
-```{r}
-
-```
-
 
 # cleanup
 ```{r}
