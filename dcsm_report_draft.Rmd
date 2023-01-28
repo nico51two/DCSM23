@@ -292,12 +292,12 @@ hour_ct <- rep(c(1:912), each = 6)
 # stick it to the df
 qc_df <- cbind(qc_df, h_ct = hour_ct)
 
-test <- qc_df %>% 
+bh <- qc_df %>% 
   group_by(., h_flag = h_ct) %>% 
   summarize(., sum_flags=sum(qc_all)) %>% 
   filter(sum_flags>=2)
 # this yields a vector of all hours that must be set to NA
-bad_hours <- test$h_flag
+bad_hours <- bh$h_flag
 # create df
 qc_df2 <- qc_df
 # overwrite with NA
@@ -568,10 +568,28 @@ write_csv(hobo_hr_corr, file = "10350049_Th.csv" )
 ```
 
 Plot showing corrected data
-```{r TODO PLOT}
-# TODO make plot of filled in time series
+```{r corrected HOBO plot}
+
+tempDF <- cbind(tempDF, HobCor=hobo_hr_corr$th)
+tempDF$HobCor <- as.numeric(tempDF$HobCor)
+
+plot3 <- ggplot(tempDF,aes(x=time))+
+    geom_line(tempDF,mapping=aes(y=tempURB,color='URB'))+
+    #geom_line(tempDF,mapping=aes(y=tempGar,color='GAR'))+
+    #geom_line(tempDF,mapping=aes(y=tempWBI,color='WBI'))+
+    #geom_line(tempDF,mapping=aes(y=tempDWD,color='DWD'))+
+    geom_line(tempDF,mapping=aes(y=HobCor,color='HOB'))+
+    labs(x="\n\nTime",y="\nTemperature in deg. C.")+
+    ggtitle("Corrected HOBO and ref. station temperature")+
+    scale_fill_manual(name="Station", breaks=c('URB','HOB'),
+                       values = c("URB"="#E2D200","HOB"="#5BBCD6"))+
+  guides(color = guide_legend(title = "Station"))
 ```
 
+```{r}
+plot3
+```
+Looking at the graph (showing the full time series) now makes it clear why the URB station was best suited for the regression. Trends and peaks are very similar with only a little offset (URB temperature is a bit higher most of the time).
 
 # 5.	Calculate indices
 
@@ -595,8 +613,9 @@ HOBO_MTab <- dbReadTable(con, 'metadata')
 ```
 
 Meta table clipped to this year by specifying the 'term id' (gathered from the table overview not included here); location attribute parsed using `sf::st_asewkt()`.
-```{sql connection=con}
-SELECT  m.id, device_id as "HOBO id", st_asewkt(location) as location, term_id as term, description
+
+```{sql connection=con, output.var=HOBO_MTab }
+SELECT  m.id, device_id as "HOBO id", st_x(location) as lon, st_y(location) as lat, term_id as term, description
 FROM metadata m
 WHERE term_id ='15'
 ```
@@ -800,7 +819,7 @@ idx_all_temp <- all_temp_23 %>% # all hobo temps and dates
 #   mutate(avgMaxD=avgMaxD) %>% 
 #   ungroup()
 
-# library(data.table) # dplyr/sf/plyr namespace problems (?) made me use this
+library(data.table) # dplyr/sf/plyr namespace problems (?) made me use this
 
 idx_all_temp <- idx_all_temp %>% 
   mutate(day_=date(tstamp))
@@ -818,6 +837,9 @@ meanDtemp <- maxDtemp[, AVG:=mean(MX), by = meta_id]
 HOBOs23 <- meanDtemp %>% 
   group_by(meta_id) %>%
   summarise(avgMxDelta=max(AVG))
+
+# detach(package:data.table,unload = TRUE)
+library(dplyr)
 ```
 
 ### Combine in one table
@@ -829,8 +851,8 @@ fin_tab <- HOBO_MTab %>%
   filter(between(id, 217, 242)) %>% 
   arrange(id)
 
-# join idx_qc (contains indices computed on the DB)
-# HOBO_MTab (contains meta info, location)
+# join idx_qc (contains indices computed on the DB) and
+# HOBO_MTab (contains meta info, location) and
 # HOBOs23 (contains avg Max Temp Delta)
 
 full_hobos <- merge(x=idx_qc, y=fin_tab, by="id", sort = TRUE) 
@@ -841,9 +863,7 @@ full_hobos <- merge(x=full_hobos, y=HOBOs23, by.y = "meta_id", by.x = "id")
 # 6. Spatial analysis
 
 ## 6.1	Find spatial data 
-<div class="alert alert-info">You don't need SQL for this task. Check out the table names and do some research online to find out more about the data used.</div>
 
-The data comes from OpenStreetMap, the largest community driven effort to build a database of global structural geodata, which can be used by everyone under a ODbL license, which includes commercial uses. Geodata standards, like the OSM model but also European standards like INSPIRE are extremely important to make public geodata usable. These datasets are heavily structured and their use often involves many dimensions and large data amounts. Without a standard, each authority would publish different data and a collective use is in fact impossible.
 
 ## 6.2	Filter by location
 
@@ -852,8 +872,24 @@ Filter the database for only the city districts, that contain a reference statio
 </div>
 
 First, create a sub-query/view/with statement containing all reference stations. Then extent this with the needed filter
+
+```{r}
+
+dbListTables(con)
+
+```
+
 ```{sql connection=con}
-create temporary view solution_62 as
+
+create temporary view oview as
+select * from osm_nodes
+
+select * from oview
+```
+
+
+```{sql connection=con}
+create temporary view geo_dat as
 with ref as (
   select 'DWD 1443' as name, ___ as geom union
   select 'DWD 13667' as name, ___  as geom union
